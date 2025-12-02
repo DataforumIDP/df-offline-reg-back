@@ -6,6 +6,7 @@ import { createMiddlewares } from "../middlewares/accounts/createMiddlewares";
 import { adminRoles, allRoles } from "../datas/rolesData";
 import { updateMiddlewares } from "../middlewares/accounts/updateMiddlewares";
 import { deleteMiddlewares } from "../middlewares/accounts/deleteMiddlewares";
+import { refreshMiddlewares } from "../middlewares/accounts/refreshMiddlewares";
 
 export const accountsRouter = Router();
 
@@ -20,6 +21,7 @@ accountsRouter.post(
 );
 
 accountsRouter.post("/auth/admin", authMiddlewares, account.authbr(adminRoles));
+accountsRouter.post("/auth/refresh", refreshMiddlewares, account.refreshToken);
 
 accountsRouter.get("/self", authenticateJWT(true), account.self);
 accountsRouter.get("/", [authenticateJWT(true)], account.get);

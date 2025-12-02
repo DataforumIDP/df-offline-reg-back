@@ -1,11 +1,10 @@
 import { Request, Response, NextFunction } from "express";
-import { ModelStatic } from "sequelize";
 import { wrap } from "../utils/wrap";
 import { error404 } from "../utils/errors";
 import { BaseDAL } from "../dal/_baseDAL";
 
 export function existsEntity(props: {
-    model: any;
+    tableName: string;
     resultCheckStatus?: boolean;
     objKey?: string;
     reqKey?: string;
@@ -13,7 +12,7 @@ export function existsEntity(props: {
 }) {
     return async function (req: Request, res: Response, next: NextFunction) {
         const {
-            model,
+            tableName,
             resultCheckStatus = true,
             objKey = "id",
             reqKey = "params",
@@ -22,7 +21,7 @@ export function existsEntity(props: {
 
         const id = req[reqKey][objKey];
 
-        const [result] = await wrap(new BaseDAL(model).findOne({ id }), true);
+        const [result] = await wrap(new BaseDAL(tableName).findOne({ id }), true);
 
         if (!result === resultCheckStatus) return error404(res);
 

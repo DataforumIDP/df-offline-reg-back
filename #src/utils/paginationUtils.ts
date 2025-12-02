@@ -1,5 +1,5 @@
 export function paginationResponse({ list, all, limit, page}) {
-    const total = all?.length || 1;
+    const total = typeof all === 'number' ? all : (all?.length || 1);
     limit = (parseInt(limit) || 20)
     return {
         records: list,

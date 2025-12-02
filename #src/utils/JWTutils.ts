@@ -5,22 +5,52 @@ dotenv.config();
 
 export class JWT {
 
-    static secret = (process.env.JWT_SECRET as string) || "12345";
+    static secret = (process.env.JWT_ACCESS_SECRET as string) || "12345";
+    static refreshSecret = (process.env.JWT_REFRESH_SECRET as string) || "refresh_secret_12345";
 
-    static create(payload: any) {
+    static createAccessToken(payload: any) {
         return jwt.sign(
-            { payload },
+            { 
+                payload,
+                jti: Date.now() + Math.random() // Добавляем уникальный идентификатор токена
+            },
             this.secret,
-            { expiresIn: "2d" } // Токен действителен 2 дня
+            { expiresIn: "15m" } // Access токен действителен 15 минут
         );
     }
 
-    static verify(token: string) {
+    static createRefreshToken(payload: any) {
+        return jwt.sign(
+            { payload },
+            this.refreshSecret,
+            { expiresIn: "60d" } // Refresh токен действителен 60 дней
+        );
+    }
+
+    static verifyAccessToken(token: string) {
         return new Promise((resolve, reject) => {
             jwt.verify(token, this.secret, (err, decoded) => {
                 if (err) reject(err)
                     else resolve(decoded)
             });
         });
+    }
+
+    static verifyRefreshToken(token: string) {
+        return new Promise((resolve, reject) => {
+            jwt.verify(token, this.refreshSecret, (err, decoded) => {
+                if (err) reject(err)
+                    else resolve(decoded)
+            });
+        });
+    }
+
+    // Оставляем старые методы для обратной совместимости
+    static create(payload: any) {
+        return this.createAccessToken(payload);
+    }
+
+    static verify(token: string) {
+        return this.verifyAccessToken(token);
     }
 }

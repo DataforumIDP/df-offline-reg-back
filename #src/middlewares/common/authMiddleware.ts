@@ -2,7 +2,7 @@
 import { Request, Response, NextFunction } from "express";
 import { authError, errorSend } from "../../utils/errors";
 import { wrap } from "../../utils/wrap";
-import Accounts from "../../models/accounts";
+import {Account} from "../../models/accounts";
 import { JWT } from "../../utils/JWTutils";
 import { AccountsDAL } from "../../dal/accountsDAL";
 

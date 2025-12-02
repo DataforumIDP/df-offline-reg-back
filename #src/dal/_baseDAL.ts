@@ -1,59 +1,65 @@
-import { Model, ModelStatic, Op } from "sequelize";
+import { Knex } from "knex";
+import { db } from "../config/db";
 
-export class BaseDAL<T extends Model> {
-    protected model: ModelStatic<T>;
+export class BaseDAL {
+    protected tableName: string;
+    protected db: Knex;
 
-    constructor(model: ModelStatic<T>) {
-        this.model = model;
+    constructor(tableName: string) {
+        this.tableName = tableName;
+        this.db = db;
     }
 
-    create(data: any) {
-        return this.model.create(data, { returning: true });
+    async create(data: any) {
+        const [result] = await this.db(this.tableName)
+            .insert(data)
+            .returning('*');
+        return result;
     }
 
-    updateOne(entity: T, params: any) {
-        return entity.update(params, { returning: true });
+    async updateOne(id: number, params: any) {
+        params.updated_at = this.db.fn.now();
+        const [result] = await this.db(this.tableName)
+            .where({ id })
+            .update(params)
+            .returning('*');
+        return result;
     }
 
-    updateMany(entityIds: number[], params: any) {
-        const where = { id: { [Op.in]: entityIds } };        
-
-        return this.model.update(params, {
-            where,
-            returning: true,
-        });
+    async updateMany(entityIds: number[], params: any) {
+        params.updated_at = this.db.fn.now();
+        return await this.db(this.tableName)
+            .whereIn('id', entityIds)
+            .update(params)
+            .returning('*');
     }
 
-    updateByConditions(consditions: any, params: any) {
-        return this.model.update(params, {
-            where: consditions,
-            returning: true,
-        });
+    async updateByConditions(conditions: any, params: any) {
+        params.updated_at = this.db.fn.now();
+        return await this.db(this.tableName)
+            .where(conditions)
+            .update(params)
+            .returning('*');
     }
 
 
-
-    addDeleteConditions(
-        whereConditions: any[]
-    ) {
+    addDeleteConditions(whereConditions: any[]) {
         whereConditions.push({
-            isDelete: false,
+            is_delete: false,
         });
-
         return whereConditions;
     }
+
     addDateConditions(
         params: { dateRange?: string[] },
         whereConditions: any[]
     ) {
         const { dateRange } = params;
 
-
         if (dateRange) {
             const [startDate, endDate] = dateRange;
 
             if (startDate && !endDate) {
-                // Если передана только одна дата
                 const startOfDay = new Date(startDate);
                 startOfDay.setUTCHours(0, 0, 0, 0);
 
@@ -61,18 +67,16 @@ export class BaseDAL<T extends Model> {
                 endOfDay.setUTCHours(23, 59, 59, 999);
 
                 whereConditions.push({
-                    pubDate: {
-                        [Op.between]: [
-                            startOfDay.toISOString(),
-                            endOfDay.toISOString(),
-                        ],
+                    pub_date: {
+                        '>=': startOfDay.toISOString(),
+                        '<=': endOfDay.toISOString(),
                     },
                 });
             } else if (startDate && endDate) {
-                // Если переданы обе даты
                 whereConditions.push({
-                    pubDate: {
-                        [Op.between]: [startDate, endDate],
+                    pub_date: {
+                        '>=': startDate,
+                        '<=': endDate,
                     },
                 });
             }
@@ -81,49 +85,70 @@ export class BaseDAL<T extends Model> {
         return whereConditions;
     }
 
-    _get(params: any) {
+    async _get(params: any) {
         let {
-            whereConditions,
+            whereConditions = [],
             search = "",
             limit = 20,
-            offset,
-            include,
-            order = [["createdAt", "DESC"]],
+            offset = 0,
+            order = [["created_at", "DESC"]],
         } = params;
 
-        const replacements = { searchQuery: search };
-        const where = {
-            [Op.and]: this.addDeleteConditions(whereConditions),
-        };                
+        const query = this.db(this.tableName);
 
-        return [
-            this.model.findAll({
-                where,
-                replacements,
-                order,
-                limit,
-                offset,
-                include,
-            }),
-            this.model.findAll({
-                where,
-                replacements,
-            }),
-        ];
+        // Применяем условия where
+        whereConditions = this.addDeleteConditions(whereConditions);
+        whereConditions.forEach((condition: any) => {
+            if (typeof condition === 'object' && !Array.isArray(condition)) {
+                Object.entries(condition).forEach(([key, value]) => {
+                    if (typeof value === 'object' && value !== null) {
+                        // Обработка операторов типа >=, <=
+                        Object.entries(value).forEach(([op, val]) => {
+                            if (op === '>=') query.where(key, '>=', val);
+                            else if (op === '<=') query.where(key, '<=', val);
+                            else query.where(key, op as any, val);
+                        });
+                    } else {
+                        query.where(key, value as any);
+                    }
+                });
+            }
+        });
+
+        // Сортировка
+        if (Array.isArray(order)) {
+            order.forEach(([column, direction]) => {
+                query.orderBy(column, direction.toLowerCase());
+            });
+        }
+
+        const countQuery = query.clone().count('* as count');
+        const dataQuery = query.clone().limit(limit).offset(offset);
+
+        const [data, countResult] = await Promise.all([
+            dataQuery,
+            countQuery,
+        ]);
+
+        const total = parseInt((countResult[0] as any).count, 10);
+
+        return [data, { total }];
     }
 
-    findByPk(pk: any) {
-        return this.model.findByPk(pk);
+    async findByPk(pk: number) {
+        return await this.db(this.tableName)
+            .where({ id: pk })
+            .first();
     }
 
-    findOne(where: any) {
-        where.isDelete = false
-        return this.model.findOne({ where });
+    async findOne(where: any) {
+        where.is_delete = false;
+        return await this.db(this.tableName)
+            .where(where)
+            .first();
     }
 
-    _delete(ids: any[]) {
-        return this.updateMany(ids, { isDelete: true });
+    async _delete(ids: number[]) {
+        return this.updateMany(ids, { is_delete: true });
     }
-
-    // Вы можете добавить другие общие методы здесь
 }

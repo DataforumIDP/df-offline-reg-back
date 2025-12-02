@@ -3,7 +3,7 @@ import { authenticateJWT } from "../common/authMiddleware";
 import { param } from "express-validator";
 import { inputValidationMiddleware } from "../common/inputValidationMiddleware";
 import { existsEntity } from "../existsEntity";
-import Accounts from "../../models/accounts";
+import {Account} from "../../models/accounts";
 import { roleCheck } from "../common/roleCaheck";
 import { adminRoles } from "../../datas/rolesData";
 
@@ -14,5 +14,5 @@ export const updateMiddlewares = [
     roleCheck(adminRoles),
     idValidate,
     inputValidationMiddleware,
-    existsEntity({model: Accounts, entityKey: "account"})
+    existsEntity({tableName: "accounts", entityKey: "account"})
 ]
