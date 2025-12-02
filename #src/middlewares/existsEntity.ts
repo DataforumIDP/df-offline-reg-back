@@ -21,7 +21,10 @@ export function existsEntity(props: {
 
         const id = req[reqKey][objKey];
 
-        const [result] = await wrap(new BaseDAL(tableName).findOne({ id }), true);
+        console.log(id);
+        
+
+        const [result] = await wrap(new BaseDAL(tableName).findOne({ id: parseInt(id) }), true);
 
         if (!result === resultCheckStatus) return error404(res);
 

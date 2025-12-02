@@ -7,18 +7,20 @@ import { adminRoles, allRoles } from "../datas/rolesData";
 import { updateMiddlewares } from "../middlewares/accounts/updateMiddlewares";
 import { deleteMiddlewares } from "../middlewares/accounts/deleteMiddlewares";
 import { refreshMiddlewares } from "../middlewares/accounts/refreshMiddlewares";
+import { registerMiddlewares } from "../middlewares/accounts/registerMiddlewares";
 
 export const accountsRouter = Router();
 
 const account = new AccountService();
 
 accountsRouter.post("/", createMiddlewares, account.crete);
+accountsRouter.post("/reg", registerMiddlewares, account.register);
 
-accountsRouter.post(
-    "/auth/operator",
-    authMiddlewares,
-    account.authbr(allRoles)
-);
+// accountsRouter.post(
+//     "/auth/operator",
+//     authMiddlewares,
+//     account.authbr(allRoles)
+// );
 
 accountsRouter.post("/auth/admin", authMiddlewares, account.authbr(adminRoles));
 accountsRouter.post("/auth/refresh", refreshMiddlewares, account.refreshToken);

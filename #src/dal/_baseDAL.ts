@@ -97,7 +97,7 @@ export class BaseDAL {
         const query = this.db(this.tableName);
 
         // Применяем условия where
-        whereConditions = this.addDeleteConditions(whereConditions);
+        // whereConditions = this.addDeleteConditions(whereConditions);
         whereConditions.forEach((condition: any) => {
             if (typeof condition === 'object' && !Array.isArray(condition)) {
                 Object.entries(condition).forEach(([key, value]) => {
@@ -142,7 +142,6 @@ export class BaseDAL {
     }
 
     async findOne(where: any) {
-        where.is_delete = false;
         return await this.db(this.tableName)
             .where(where)
             .first();

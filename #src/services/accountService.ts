@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { ReqWithBody, ReqWithParams, ReqWithQuery } from "../baseTypes";
 import { AccountsDAL as aDAL } from "../dal/accountsDAL";
+import { ProjectsDAL as pDAL } from "../dal/projectsDAL";
 import { authError, dbError } from "../utils/errors";
 import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
@@ -9,8 +10,10 @@ import { _offset } from "../utils/getOffset";
 import { paginationResponse } from "../utils/paginationUtils";
 import { filteredObjectByKeys } from "../utils/filteredObjectByKeys";
 import { AccountHelper } from "../models/accounts";
+import { generateRandomString } from "../utils/generateRandomString";
 
 const AccountDAL = new aDAL();
+const ProjectDAL = new pDAL();
 
 export class AccountService {
     async crete(
@@ -175,5 +178,51 @@ export class AccountService {
         if (result === null) return dbError(res, "#DelAcc1");
 
         response204(res);
+    }
+
+    async register(
+        req: ReqWithBody<{ project: string; name: string }>,
+        res: Response
+    ) {
+        const { project: projectSlug, name } = req.body;
+
+        // Проверяем существование проекта
+        const [project] = await wrap(ProjectDAL.getBySlug(projectSlug));
+        if (!project) {
+            return res.status(404).json({
+                error: "Проект не найден",
+            });
+        }
+
+        // Генерируем случайный логин и пароль
+        const login = `op${generateRandomString(8)}`;
+        const password = generateRandomString(12);
+
+        // Создаем оператора
+        const hashedPassword = await AccountHelper.hashPassword(password);
+        const data = {
+            login: AccountHelper.normalizeLogin(login),
+            password: hashedPassword,
+            name,
+            role: "operator",
+            projectId: project.id,
+        };
+
+        const [account] = await wrap(AccountDAL.create(data));
+        if (!account) return dbError(res, "#REGOP1");
+
+        // Генерируем токены
+        const payload = AccountHelper.toJSON(account);
+        const accessToken = JWT.createAccessToken(payload);
+        const refreshToken = JWT.createRefreshToken(payload);
+
+        res.status(201).json({
+            message: "Регистрация выполнена успешно",
+            login,
+            password,
+            accessToken,
+            refreshToken,
+            account: payload,
+        });
     }
 }

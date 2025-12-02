@@ -7,6 +7,7 @@ export interface Account {
     name: string;
     password: string;
     role: string;
+    projectId: number | null;
     is_delete: boolean;
     created_at: Date;
     updated_at: Date;
@@ -19,6 +20,7 @@ export class AccountHelper {
             name: account.name,
             login: account.login,
             role: account.role,
+            projectId: account.projectId,
         };
     }
 

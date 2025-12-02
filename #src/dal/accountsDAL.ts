@@ -66,4 +66,43 @@ export class AccountsDAL extends BaseDAL {
             offset,
         });
     }
+
+    async getByProjectId(projectId: number, params: any) {
+        const { page, search, limit } = params;
+        const offset = _offset(page, limit);
+
+        let query = this.db(this.tableName)
+            .where({ is_delete: false, projectId });
+
+        let countQuery = this.db(this.tableName)
+            .where({ is_delete: false, projectId });
+
+        if (search) {
+            query = query.where(function() {
+                this.where('name', 'ilike', `%${search}%`)
+                    .orWhere('login', 'ilike', `%${search}%`);
+            });
+
+            countQuery = countQuery.where(function() {
+                this.where('name', 'ilike', `%${search}%`)
+                    .orWhere('login', 'ilike', `%${search}%`);
+            });
+        }
+
+        query = query
+            .orderBy('created_at', 'desc')
+            .limit(limit || 20)
+            .offset(offset);
+
+        countQuery = countQuery.count('* as count');
+
+        const [data, countResult] = await Promise.all([
+            query,
+            countQuery,
+        ]);
+
+        const total = parseInt((countResult[0] as any).count, 10);
+
+        return [data, { total }];
+    }
 }

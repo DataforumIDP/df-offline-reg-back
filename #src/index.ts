@@ -3,6 +3,7 @@ import { db } from "./config/db";
 import cors from "cors";
 import { _404Middleware } from "./middlewares/common/404Middleware";
 import { accountsRouter } from "./routes/accountsRouter";
+import { projectsRouter } from "./routes/projectsRouter";
 
 const app = express();
 
@@ -15,7 +16,8 @@ app.use(
     })
 );
 
-app.use("/accounts", accountsRouter)
+app.use("/accounts", accountsRouter);
+app.use("/projects", projectsRouter);
 
 app.use(_404Middleware);
 
