@@ -97,6 +97,12 @@ export class ProjectsDAL extends BaseDAL {
         return [data, { total }];
     }
 
+    async findByPk(id: number) {
+        return await this.db(this.tableName)
+            .where({ id, isDelete: false })
+            .first();
+    }
+
     // Инвертирование раскладки клавиатуры RU <-> EN
     private invertKeyboardLayout(text: string): string {
         const ruToEn: Record<string, string> = {

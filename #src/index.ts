@@ -4,6 +4,7 @@ import cors from "cors";
 import { _404Middleware } from "./middlewares/common/404Middleware";
 import { accountsRouter } from "./routes/accountsRouter";
 import { projectsRouter } from "./routes/projectsRouter";
+import { printTemplatesRouter } from "./routes/printTemplatesRouter";
 
 const app = express();
 
@@ -18,6 +19,7 @@ app.use(
 
 app.use("/accounts", accountsRouter);
 app.use("/projects", projectsRouter);
+app.use("/print-templates", printTemplatesRouter);
 
 app.use(_404Middleware);
 

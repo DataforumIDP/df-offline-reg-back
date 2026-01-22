@@ -1,16 +1,19 @@
 import { Request, Response } from "express";
 import { ReqWithBody, ReqWithParams, ReqWithQuery } from "../baseTypes";
 import { ProjectsDAL as pDAL } from "../dal/projectsDAL";
+import { ProjectFieldsDAL } from "../dal/projectFieldsDAL";
 import { dbError } from "../utils/errors";
 import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
 import { paginationResponse } from "../utils/paginationUtils";
 import { filteredObjectByKeys } from "../utils/filteredObjectByKeys";
 import { ProjectHelper } from "../models/projects";
+import { ProjectFieldHelper } from "../models/projectFields";
 import { transliterateString } from "../utils/transliterateUtil";
 import { generateRandomString } from "../utils/generateRandomString";
 
 const ProjectDAL = new pDAL();
+const fieldDAL = new ProjectFieldsDAL();
 
 export class ProjectService {
     async create(
@@ -109,7 +112,14 @@ export class ProjectService {
             });
         }
 
-        res.json(ProjectHelper.toJSON(project));
+        // Получаем схему полей проекта
+        const [fields] = await wrap(fieldDAL.getByProjectId(project.id));
+        const scheme = fields ? fields.map(ProjectFieldHelper.toJSON) : [];
+
+        res.json({
+            ...ProjectHelper.toJSON(project),
+            scheme,
+        });
     }
 
     async delete(

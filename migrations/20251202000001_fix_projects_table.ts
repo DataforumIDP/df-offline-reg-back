@@ -5,12 +5,17 @@ export async function up(knex: Knex): Promise<void> {
     const hasTable = await knex.schema.hasTable('projects');
     
     if (hasTable) {
+        // Удаляем внешние ключи перед удалением таблицы
+        await knex.schema.alterTable('accounts', (table) => {
+            table.dropForeign(['projectId']);
+        });
+        
         // Удаляем старую таблицу если она существует
         await knex.schema.dropTable('projects');
     }
     
     // Создаем таблицу с правильными именами полей
-    return knex.schema.createTable('projects', (table) => {
+    await knex.schema.createTable('projects', (table) => {
         table.increments('id').primary();
         table.string('title', 128).notNullable();
         table.string('slug', 128).notNullable().unique();
@@ -25,6 +30,11 @@ export async function up(knex: Knex): Promise<void> {
         table.index('dateStart');
         table.index('dateEnd');
         table.index('isDelete');
+    });
+    
+    // Пересоздаем внешний ключ
+    return knex.schema.alterTable('accounts', (table) => {
+        table.foreign('projectId').references('id').inTable('projects').onDelete('SET NULL');
     });
 }
 
