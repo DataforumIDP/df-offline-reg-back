@@ -44,12 +44,12 @@ export class AccountService {
         ) => {
             const { login, password } = req.body;
 
-            const [account] = await wrap(
+            const [account, error] = await wrap(
                 AccountDAL.getByLoginAndRoles(login, roles, false),
                 true
             );
 
-            if (account === null)
+            if (error || !account)
                 return authError(res, "Некорректный логин или пароль!");
 
             const isValid = await AccountHelper.validPassword(account, password);
