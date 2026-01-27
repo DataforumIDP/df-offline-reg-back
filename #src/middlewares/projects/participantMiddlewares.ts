@@ -152,9 +152,13 @@ const validateParticipantData = (isUpdate: boolean = false) => {
                 continue;
             }
 
-            // Проверка обязательности (все поля кроме id обязательны при создании)
-            if (value === undefined || value === null || value === '') {
-                if (!isUpdate) {
+            // Проверка обязательности поля
+            // Пустая строка считается отсутствием значения
+            const isEmpty = value === undefined || value === null || value === '';
+            
+            if (isEmpty) {
+                // Поле пустое - проверяем, обязательно ли оно
+                if (!isUpdate && !config.optional) {
                     errors[key] = `Поле "${label}" обязательно для заполнения`;
                 }
                 continue;
@@ -355,4 +359,41 @@ export const printParticipantMiddlewares = [
     inputValidationMiddleware,
     checkProjectAccess(true),
     checkParticipantBelongsToProject,
+];
+
+// ===== Excel и массовые операции =====
+
+// GET /projects/:projectId/participants/excel - получить шаблон Excel (админы и операторы)
+export const excelTemplateMiddlewares = [
+    authenticateJWT(true),
+    projectIdParam,
+    inputValidationMiddleware,
+    checkProjectAccess(true),
+];
+
+// POST /projects/:projectId/participants/excel - импорт из Excel (только админы)
+export const excelImportMiddlewares = [
+    authenticateJWT(true),
+    projectIdParam,
+    inputValidationMiddleware,
+    checkProjectAccess(false), // Только админы
+];
+
+// GET /projects/:projectId/participants/export - экспорт в Excel (админы и операторы)
+export const excelExportMiddlewares = [
+    authenticateJWT(true),
+    projectIdParam,
+    pageQuery,
+    limitQuery,
+    directionQuery,
+    inputValidationMiddleware,
+    checkProjectAccess(true),
+];
+
+// DELETE /projects/:projectId/participants - очистка всех участников (только админы)
+export const clearParticipantsMiddlewares = [
+    authenticateJWT(true),
+    projectIdParam,
+    inputValidationMiddleware,
+    checkProjectAccess(false), // Только админы
 ];

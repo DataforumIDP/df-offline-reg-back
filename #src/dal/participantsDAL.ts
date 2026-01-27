@@ -8,6 +8,16 @@ export interface ParticipantsQuery {
     search?: string;
     order?: string;
     direction?: 'ASC' | 'DESC';
+    filters?: string; // JSON строка вида {"key": "value", "key2": ["val1", "val2"]}
+}
+
+/**
+ * Интерфейс для фильтров
+ * - string значение: частичное совпадение (ILIKE) для text полей
+ * - string[] значение: точное совпадение (ANY) для list/multiList полей
+ */
+export interface ParsedFilters {
+    [key: string]: string | string[];
 }
 
 export class ParticipantsDAL extends BaseDAL {
@@ -57,14 +67,20 @@ export class ParticipantsDAL extends BaseDAL {
      * - Автоматическая конвертация раскладки RU<->EN
      * - Поиск по телефонам (только цифры)
      * - Комбинированный поиск: пробел = AND, || = OR
-     * - Поиск по конкретному ключу: {{key: value}}
      * 
-     * Примеры запросов:
+     * Поддержка фильтров (параметр filters):
+     * - Для text полей: частичное совпадение (ILIKE)
+     * - Для list/multiList: точное совпадение из массива значений
+     * 
+     * Примеры запросов поиска:
      * - "Иванов Иван" - найти где есть и Иванов И Иван
      * - "Bdfy" - найдёт Иван (конвертация раскладки)
      * - "8005553535" - найдёт 8 800 555-35-35 (нормализация телефона)
      * - "Иванов || VIP" - найти где Иванов ИЛИ VIP
-     * - "{{work: НИИ}}" - поиск по полю work
+     * 
+     * Примеры фильтров:
+     * - {"city": "Москва"} - участники из Москвы (частичное совпадение)
+     * - {"status": ["VIP", "Спикер"]} - участники со статусом VIP или Спикер
      */
     async getByProjectId(
         projectId: number,
@@ -79,6 +95,36 @@ export class ParticipantsDAL extends BaseDAL {
         // Базовый запрос
         let baseQuery = this.db<Participant>(this.tableName)
             .where({ project_id: projectId, is_delete: false });
+
+        // Обработка фильтров
+        if (query.filters) {
+            try {
+                const filters: ParsedFilters = JSON.parse(query.filters);
+                
+                for (const [key, value] of Object.entries(filters)) {
+                    if (Array.isArray(value)) {
+                        // Для массива - точное совпадение одного из значений
+                        // Для multiList (массив в JSONB) используем пересечение
+                        // Для обычного list - просто IN
+                        if (value.length > 0) {
+                            const placeholders = value.map(() => '?').join(', ');
+                            baseQuery = baseQuery.whereRaw(
+                                `(data->>? IN (${placeholders}) OR (data->? @> ANY(ARRAY[${value.map(() => '?::jsonb').join(', ')}])))`,
+                                [key, ...value, key, ...value.map(v => JSON.stringify([v]))]
+                            );
+                        }
+                    } else if (typeof value === 'string' && value.trim()) {
+                        // Для строки - частичное совпадение ILIKE
+                        baseQuery = baseQuery.whereRaw(
+                            `data->>? ILIKE ?`,
+                            [key, `%${value}%`]
+                        );
+                    }
+                }
+            } catch (e) {
+                console.error('[Filters Parse Error]', e);
+            }
+        }
 
         // Продвинутый поиск
         if (query.search && query.search.trim()) {
@@ -181,5 +227,92 @@ export class ParticipantsDAL extends BaseDAL {
                 updated_at: this.db.fn.now(),
             });
         return result > 0;
+    }
+
+    /**
+     * Получить всех участников проекта (для экспорта, без пагинации)
+     * Поддерживает фильтры и поиск
+     */
+    async getAllByProjectId(
+        projectId: number,
+        query: ParticipantsQuery
+    ): Promise<Participant[]> {
+        const order = query.order || "id";
+        const direction = query.direction?.toUpperCase() === "DESC" ? "DESC" : "ASC";
+
+        // Базовый запрос
+        let baseQuery = this.db<Participant>(this.tableName)
+            .where({ project_id: projectId, is_delete: false });
+
+        // Обработка фильтров (аналогично getByProjectId)
+        if (query.filters) {
+            try {
+                const filters: ParsedFilters = JSON.parse(query.filters);
+                
+                for (const [key, value] of Object.entries(filters)) {
+                    if (Array.isArray(value)) {
+                        if (value.length > 0) {
+                            const placeholders = value.map(() => '?').join(', ');
+                            baseQuery = baseQuery.whereRaw(
+                                `(data->>? IN (${placeholders}) OR (data->? @> ANY(ARRAY[${value.map(() => '?::jsonb').join(', ')}])))`,
+                                [key, ...value, key, ...value.map(v => JSON.stringify([v]))]
+                            );
+                        }
+                    } else if (typeof value === 'string' && value.trim()) {
+                        baseQuery = baseQuery.whereRaw(
+                            `data->>? ILIKE ?`,
+                            [key, `%${value}%`]
+                        );
+                    }
+                }
+            } catch (e) {
+                console.error('[Filters Parse Error]', e);
+            }
+        }
+
+        // Поиск
+        if (query.search && query.search.trim()) {
+            const parsed = parseSearchQuery(query.search);
+            const { sql, params } = buildSearchSQL(parsed);
+
+            if (sql) {
+                await this.db.raw("SET pg_trgm.similarity_threshold = 0.2");
+                baseQuery = baseQuery.whereRaw(sql, params);
+            }
+        }
+
+        // Сортировка
+        if (order === "id" || order === "created_at" || order === "updated_at") {
+            baseQuery = baseQuery.orderBy(order, direction);
+        } else {
+            baseQuery = baseQuery.orderByRaw(`data->>'${order}' ${direction}`);
+        }
+
+        return baseQuery;
+    }
+
+    /**
+     * Удалить всех участников проекта (жёсткое удаление)
+     */
+    async deleteAllByProject(projectId: number): Promise<number> {
+        const result = await this.db<Participant>(this.tableName)
+            .where({ project_id: projectId })
+            .del();
+        return result;
+    }
+
+    /**
+     * Пакетное создание участников
+     */
+    async createBatch(projectId: number, dataList: Record<string, any>[]): Promise<Participant[]> {
+        const insertData = dataList.map(data => ({
+            project_id: projectId,
+            data: JSON.stringify(data),
+        }));
+
+        const results = await this.db<Participant>(this.tableName)
+            .insert(insertData as any)
+            .returning("*");
+        return results;
     }
 }

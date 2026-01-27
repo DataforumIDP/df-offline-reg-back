@@ -23,6 +23,10 @@ import {
     deleteParticipantMiddlewares,
     getLogsMiddlewares,
     printParticipantMiddlewares,
+    excelTemplateMiddlewares,
+    excelImportMiddlewares,
+    excelExportMiddlewares,
+    clearParticipantsMiddlewares,
 } from "../middlewares/projects/participantMiddlewares";
 import {
     assignTemplateMiddlewares,
@@ -58,6 +62,12 @@ projectsRouter.delete("/:projectId/print-template", removeTemplateMiddlewares, p
 // ===== Роуты логов участников (должны быть ДО роутов с :participantId) =====
 projectsRouter.get("/:projectId/participants/log/stats", getLogsMiddlewares, participantLogService.getStats);
 projectsRouter.get("/:projectId/participants/log", getLogsMiddlewares, participantLogService.getAll);
+
+// ===== Excel и массовые операции (должны быть ДО роутов с :participantId) =====
+projectsRouter.get("/:projectId/participants/excel", excelTemplateMiddlewares, participant.getExcelTemplate);
+projectsRouter.post("/:projectId/participants/excel", excelImportMiddlewares, participant.importFromExcel);
+projectsRouter.get("/:projectId/participants/export", excelExportMiddlewares, participant.exportToExcel);
+projectsRouter.delete("/:projectId/participants", clearParticipantsMiddlewares, participant.clearAll);
 
 // ===== Роуты участников проекта =====
 projectsRouter.get("/:projectId/participants", getParticipantsMiddlewares, participant.getAll);

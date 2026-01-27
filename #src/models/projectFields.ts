@@ -17,6 +17,7 @@ export interface ListSettings {
 export interface ProjectFieldConfig {
     type: ProjectFieldType;
     uniq: boolean;
+    optional: boolean; // true = необязательное поле, false = обязательное
     maxLength?: number;
     listSettings?: ListSettings;
 }
@@ -56,6 +57,10 @@ export class ProjectFieldHelper {
 
         if (typeof config.uniq !== 'boolean') {
             return { valid: false, error: 'Поле uniq должно быть boolean' };
+        }
+
+        if (typeof config.optional !== 'boolean') {
+            return { valid: false, error: 'Поле optional должно быть boolean' };
         }
 
         if (config.maxLength !== undefined && (typeof config.maxLength !== 'number' || config.maxLength < 1)) {

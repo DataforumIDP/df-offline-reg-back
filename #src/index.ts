@@ -1,4 +1,5 @@
 import express from "express";
+import fileUpload from "express-fileupload";
 import { db } from "./config/db";
 import cors from "cors";
 import { _404Middleware } from "./middlewares/common/404Middleware";
@@ -10,6 +11,10 @@ const app = express();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(fileUpload({
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+    abortOnLimit: true,
+}) as any);
 app.use(
     cors({
         origin: "*",

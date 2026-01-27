@@ -182,6 +182,16 @@ export class ParticipantLogsDAL extends BaseDAL {
             )
             .orderBy(`${this.tableName}.created_at`, "DESC") as Promise<ParticipantLogWithUser[]>;
     }
+
+    /**
+     * Удалить все логи проекта (жёсткое удаление)
+     */
+    async deleteAllByProject(projectId: number): Promise<number> {
+        const result = await this.db<ParticipantLog>(this.tableName)
+            .where({ project_id: projectId })
+            .del();
+        return result;
+    }
 }
 
 export const participantLogsDAL = new ParticipantLogsDAL();

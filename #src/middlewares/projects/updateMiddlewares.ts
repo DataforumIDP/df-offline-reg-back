@@ -30,6 +30,7 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
         "description",
         "dateStart",
         "dateEnd",
+        "isOperatorEditable",
     ]);
 
     // Преобразуем даты в Date объекты если они есть

@@ -5,6 +5,7 @@ export interface Project {
     description: string;
     dateStart: Date;
     dateEnd: Date;
+    isOperatorEditable: boolean;
     isDelete: boolean;
     createdAt: Date;
     updatedAt: Date;
@@ -19,6 +20,7 @@ export class ProjectHelper {
             description: project.description,
             dateStart: project.dateStart,
             dateEnd: project.dateEnd,
+            isOperatorEditable: project.isOperatorEditable,
         };
     }
 

@@ -61,7 +61,6 @@ export function isPhoneLike(text: string): boolean {
  * Условие поиска
  */
 export interface SearchCondition {
-    key?: string;           // Конкретный ключ для поиска (из {{key: value}})
     value: string;          // Значение для поиска
     convertedValue: string; // Значение с конвертированной раскладкой
     digitsOnly?: string;    // Только цифры (для телефонов)
@@ -87,8 +86,10 @@ export interface ParsedSearch {
  * Примеры:
  * - "Иванов Иван" -> AND: [Иванов, Иван]
  * - "Иванов || VIP" -> OR: [Иванов], [VIP]
- * - "{{work: НИИ}}" -> поиск по ключу work
- * - "bdfyjd Bdfy {{work: DATAFORUM}} || 89524848041" -> сложный запрос
+ * - "bdfyjd Bdfy || 89524848041" -> сложный запрос
+ * 
+ * ВАЖНО: Поиск по конкретным полям теперь осуществляется через параметр filters,
+ * а не через синтаксис {{key: value}}
  */
 export function parseSearchQuery(search: string): ParsedSearch {
     if (!search || !search.trim()) {
@@ -101,27 +102,8 @@ export function parseSearchQuery(search: string): ParsedSearch {
     const orGroups: SearchGroup[] = orParts.map(orPart => {
         const conditions: SearchCondition[] = [];
 
-        // Извлекаем условия с ключами {{key: value}}
-        const keyValueRegex = /\{\{(\w+):\s*([^}]+)\}\}/g;
-        let match;
-        let remainingPart = orPart;
-
-        while ((match = keyValueRegex.exec(orPart)) !== null) {
-            const [fullMatch, key, value] = match;
-            const trimmedValue = value.trim();
-            
-            conditions.push({
-                key: key.trim(),
-                value: trimmedValue,
-                convertedValue: convertLayout(trimmedValue),
-                digitsOnly: isPhoneLike(trimmedValue) ? extractDigits(trimmedValue) : undefined,
-            });
-
-            remainingPart = remainingPart.replace(fullMatch, ' ');
-        }
-
-        // Остальные слова - обычные условия (AND)
-        const words = remainingPart.split(/\s+/).filter(Boolean);
+        // Разбиваем на слова (AND)
+        const words = orPart.split(/\s+/).filter(Boolean);
         
         for (const word of words) {
             conditions.push({
@@ -140,7 +122,6 @@ export function parseSearchQuery(search: string): ParsedSearch {
 /**
  * Построить SQL условие для одного условия поиска
  * Использует ? плейсхолдеры для Knex whereRaw
- * Ключ тоже передаётся как параметр для безопасности
  * 
  * Для триграмм используем EXISTS с проверкой каждого значения JSONB отдельно
  */
@@ -149,40 +130,22 @@ export function buildConditionSQL(condition: SearchCondition): { sql: string; pa
     const sqlParts: string[] = [];
 
     // Для триграммного поиска: проверяем каждое значение в JSONB отдельно
-    // EXISTS (SELECT 1 FROM jsonb_each_text(data) WHERE value % 'поиск')
     const trigramExistsExpr = `EXISTS (SELECT 1 FROM jsonb_each_text(data) jt WHERE jt.value % ?)`;
 
-    if (condition.key) {
-        // Поиск по конкретному ключу
-        sqlParts.push(`(data->>?::text ILIKE ?)`);
-        params.push(condition.key, `%${condition.value}%`);
+    // Поиск по всем полям
+    // ILIKE по сырому JSON
+    sqlParts.push(`(data::text ILIKE ?)`);
+    params.push(`%${condition.value}%`);
 
-        // Добавляем поиск с конвертированной раскладкой
-        if (condition.convertedValue !== condition.value) {
-            sqlParts.push(`(data->>?::text ILIKE ?)`);
-            params.push(condition.key, `%${condition.convertedValue}%`);
-        }
-
-        // Триграммный поиск по конкретному ключу
-        sqlParts.push(`(data->>?::text % ?)`);
-        params.push(condition.key, condition.value);
-    } else {
-        // Поиск по всем полям
-        // ILIKE по сырому JSON
+    // Добавляем поиск с конвертированной раскладкой
+    if (condition.convertedValue !== condition.value) {
         sqlParts.push(`(data::text ILIKE ?)`);
-        params.push(`%${condition.value}%`);
-
-        // Добавляем поиск с конвертированной раскладкой
-        if (condition.convertedValue !== condition.value) {
-            sqlParts.push(`(data::text ILIKE ?)`);
-            params.push(`%${condition.convertedValue}%`);
-        }
-
-        // Триграммный поиск - проверяем каждое значение JSONB отдельно
-        // Это позволяет найти "Иваноф" когда в базе "Иванов"
-        sqlParts.push(`(${trigramExistsExpr})`);
-        params.push(condition.value);
+        params.push(`%${condition.convertedValue}%`);
     }
+
+    // Триграммный поиск - проверяем каждое значение JSONB отдельно
+    sqlParts.push(`(${trigramExistsExpr})`);
+    params.push(condition.value);
 
     // Поиск по цифрам (для телефонов)
     if (condition.digitsOnly && condition.digitsOnly.length >= 4) {
