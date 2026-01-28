@@ -2,8 +2,10 @@ import { Request, Response } from "express";
 import { ProjectFieldsDAL } from "../dal/projectFieldsDAL";
 import { ProjectFieldHelper } from "../models/projectFields";
 import { dbError } from "../utils/errors";
+import { errorSend } from "../utils/errors";
 import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
+import { db } from "../config/db";
 
 const fieldDAL = new ProjectFieldsDAL();
 
@@ -51,16 +53,59 @@ export class ProjectFieldService {
      * Обновление поля (только для типа list)
      */
     async updateField(req: Request, res: Response) {
+        const projectId = Number(req.params.projectId);
         const fieldId = Number(req.params.fieldId);
-        const { config } = req.body;
+        const { label, key, type, config } = req.body;
 
-        const [updated, err] = await wrap(fieldDAL.updateField(fieldId, config));
-
-        if (err || !updated) {
+        // Получаем текущее поле
+        const [existing, getErr] = await wrap(fieldDAL.getById(fieldId));
+        if (getErr || !existing) {
             return dbError(res, "#UPDATEFIELD1");
         }
 
-        res.json(ProjectFieldHelper.toJSON(updated));
+        // Проверяем уникальность ключа и названия (исключая текущее поле)
+        const [isKeyUnique, keyErr] = await wrap(fieldDAL.isKeyUnique(projectId, key, fieldId));
+        if (keyErr) return dbError(res, "#UPDATEFIELD2");
+        if (!isKeyUnique) {
+            return errorSend(res, { key: `Поле с ключом "${key}" уже существует в этом проекте` }, { code: 400 });
+        }
+
+        const [isLabelUnique, labelErr] = await wrap(fieldDAL.isLabelUnique(projectId, label, fieldId));
+        if (labelErr) return dbError(res, "#UPDATEFIELD3");
+        if (!isLabelUnique) {
+            return errorSend(res, { label: `Поле с названием "${label}" уже существует в этом проекте` }, { code: 400 });
+        }
+
+        // Если ключ не изменился, просто обновим поле
+        const oldKey = existing.key;
+
+        try {
+            const result = await db.transaction(async (trx: any) => {
+                // Обновляем поле
+                const updated = await fieldDAL.updateFieldFull(fieldId, { label, key, type, config }, trx);
+
+                // Если ключ изменился — мигрируем данные участников в рамках той же транзакции
+                if (oldKey !== key) {
+                    // Обновляем participants.data: добавляем новое поле из старого и удаляем старый ключ
+                    await trx('participants')
+                        .where({ project_id: projectId })
+                        .whereRaw('data ? ?', [oldKey])
+                        .update({
+                            data: trx.raw("(data || jsonb_build_object(?, data->?)) - ?", [key, oldKey, oldKey]),
+                            updated_at: trx.fn.now(),
+                        });
+                }
+
+                return updated;
+            });
+
+            if (!result) return dbError(res, "#UPDATEFIELD4");
+
+            res.json(ProjectFieldHelper.toJSON(result));
+        } catch (e) {
+            console.error('[Field Update Error]', e);
+            return dbError(res, "#UPDATEFIELD5");
+        }
     }
 
     /**

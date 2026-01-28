@@ -150,4 +150,13 @@ export class BaseDAL {
     async _delete(ids: number[]) {
         return this.updateMany(ids, { is_delete: true });
     }
+
+    /**
+     * Hard delete rows by ids (permanent removal)
+     */
+    async hardDelete(ids: number[]) {
+        return await this.db(this.tableName)
+            .whereIn('id', ids)
+            .del();
+    }
 }

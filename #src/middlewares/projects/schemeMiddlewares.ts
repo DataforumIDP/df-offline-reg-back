@@ -149,17 +149,7 @@ const checkUniqueness = async (req: Request, res: Response, next: NextFunction) 
 const checkFieldEditable = async (req: Request, res: Response, next: NextFunction) => {
     const { config } = req.body;
     const existingField = req.projectField!;
-
-    // Проверяем, что поле можно редактировать
-    if (!ProjectFieldHelper.isEditable(existingField.config)) {
-        return errorSend(res, { config: "Редактирование доступно только для полей типа list" }, { code: 400 });
-    }
-
-    // Проверяем, что тип не изменился
-    if (config.type !== existingField.config.type) {
-        return errorSend(res, { config: "Изменение типа поля запрещено" }, { code: 400 });
-    }
-
+    // Раньше редактирование было ограничено; теперь разрешаем редактировать label/key/type/config.
     next();
 };
 
@@ -190,11 +180,30 @@ export const updateFieldMiddlewares = [
     authenticateJWT(true),
     projectIdParam,
     fieldIdParam,
+    keyValidation,
+    labelValidation,
     configValidation,
     inputValidationMiddleware,
     checkProjectAccess(false),
     checkFieldBelongsToProject,
-    checkFieldEditable,
+    // Уникальность ключа/названия с исключением текущего поля
+    async (req: Request, res: Response, next: NextFunction) => {
+        const { key, label } = req.body;
+        const projectId = Number(req.params.projectId);
+        const fieldId = Number(req.params.fieldId);
+
+        const [isLabelUnique] = await wrap(fieldDAL.isLabelUnique(projectId, label, fieldId));
+        if (!isLabelUnique) {
+            return errorSend(res, { label: `Поле с названием "${label}" уже существует в этом проекте` }, { code: 400 });
+        }
+
+        const [isKeyUnique] = await wrap(fieldDAL.isKeyUnique(projectId, key, fieldId));
+        if (!isKeyUnique) {
+            return errorSend(res, { key: `Поле с ключом "${key}" уже существует в этом проекте` }, { code: 400 });
+        }
+
+        next();
+    }
 ];
 
 // DELETE /projects/:projectId/scheme/:fieldId - только админы

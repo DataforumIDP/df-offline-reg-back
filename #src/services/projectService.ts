@@ -127,9 +127,19 @@ export class ProjectService {
         res: Response
     ) {
         const { id } = req.params;
-        const [result] = await wrap(ProjectDAL._delete([Number(id)]));
+        // Выполняем жесткое удаление (hard delete)
+        const [result, err] = await wrap(ProjectDAL.hardDelete([Number(id)]), !!1);
 
-        if (result === null) return dbError(res, "#DelProj1");
+        console.log(err, err === null);
+        
+        if (err !== null) {
+            return dbError(res, "#DelProj1");
+        }
+
+        // result — количество удалённых строк
+        if (!result || result === 0) {
+            return res.status(404).json({ error: 'Проект не найден' });
+        }
 
         response204(res);
     }

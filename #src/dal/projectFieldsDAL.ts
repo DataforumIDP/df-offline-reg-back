@@ -77,6 +77,40 @@ export class ProjectFieldsDAL extends BaseDAL {
         return result || null;
     }
 
+    // Обновить поле полностью (label, key, type, config)
+    // При необходимости вызывается внутри транзакции: передавайте trx как опцию
+    async updateFieldFull(id: number, data: {
+        label?: string;
+        key?: string;
+        type?: string;
+        config?: ProjectFieldConfig;
+    }, trx?: any): Promise<ProjectField | null> {
+        const qb = trx ? trx(this.tableName) : this.db(this.tableName);
+        const params: any = {};
+
+        if (data.label !== undefined) params.label = data.label;
+        if (data.key !== undefined) params.key = data.key;
+        if (data.type !== undefined) {
+            // Если передан type вместе с config, используем config; иначе добавим type в существующий config
+            if (data.config !== undefined) {
+                params.config = JSON.stringify(data.config);
+            } else {
+                params.config = this.db.raw("config::jsonb || jsonb_build_object('type', ?)", [data.type]);
+            }
+        } else if (data.config !== undefined) {
+            params.config = JSON.stringify(data.config);
+        }
+
+        params.updated_at = (trx ? trx.fn.now() : this.db.fn.now());
+
+        const [result] = await qb
+            .where({ id, is_delete: false })
+            .update(params)
+            .returning('*');
+
+        return result || null;
+    }
+
     // Мягкое удаление поля
     async softDelete(id: number): Promise<boolean> {
         const result = await this.db(this.tableName)
