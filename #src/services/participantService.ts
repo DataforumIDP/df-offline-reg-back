@@ -244,7 +244,7 @@ export class ParticipantService {
 
         // Читаем Excel
         const workbook = new Excel.Workbook();
-        await workbook.xlsx.load(file.data);
+        await workbook.xlsx.load(file.data as any);
         const worksheet = workbook.worksheets[0];
 
         if (!worksheet) {

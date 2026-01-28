@@ -6,6 +6,7 @@ import { _404Middleware } from "./middlewares/common/404Middleware";
 import { accountsRouter } from "./routes/accountsRouter";
 import { projectsRouter } from "./routes/projectsRouter";
 import { printTemplatesRouter } from "./routes/printTemplatesRouter";
+import webhooksRouter from "./routes/webhooksRouter";
 
 const app = express();
 
@@ -25,6 +26,7 @@ app.use(
 app.use("/accounts", accountsRouter);
 app.use("/projects", projectsRouter);
 app.use("/print-templates", printTemplatesRouter);
+app.use("/webhooks", webhooksRouter);
 
 app.use(_404Middleware);
 

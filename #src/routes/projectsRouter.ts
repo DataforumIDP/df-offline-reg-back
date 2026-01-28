@@ -4,6 +4,7 @@ import { ProjectFieldService } from "../services/projectFieldService";
 import { ParticipantService } from "../services/participantService";
 import { participantLogService } from "../services/participantLogService";
 import { printTemplateService } from "../services/printTemplateService";
+import { webhookService } from "../services/webhookService";
 import { createMiddlewares } from "../middlewares/projects/createMiddlewares";
 import { updateMiddlewares } from "../middlewares/projects/updateMiddlewares";
 import { deleteMiddlewares } from "../middlewares/projects/deleteMiddlewares";
@@ -58,6 +59,9 @@ projectsRouter.delete("/:projectId/scheme/:fieldId", deleteFieldMiddlewares, pro
 projectsRouter.get("/:projectId/print-template", getProjectTemplateMiddlewares, printTemplateService.getByProject);
 projectsRouter.post("/:projectId/print-template", assignTemplateMiddlewares, printTemplateService.assignToProject);
 projectsRouter.delete("/:projectId/print-template", removeTemplateMiddlewares, printTemplateService.removeFromProject);
+
+// ===== Роуты webhooks проекта =====
+projectsRouter.get("/:projectId/webhooks", getSchemeMiddlewares, webhookService.getByProject.bind(webhookService));
 
 // ===== Роуты логов участников (должны быть ДО роутов с :participantId) =====
 projectsRouter.get("/:projectId/participants/log/stats", getLogsMiddlewares, participantLogService.getStats);
