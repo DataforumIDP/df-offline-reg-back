@@ -159,6 +159,7 @@ class PrintTemplateService {
      * GET /projects/:projectId/print-template
      * Получить шаблон проекта
      */
+    
     async getByProject(req: Request, res: Response, next: NextFunction) {
         try {
             const projectId = parseInt(req.params.projectId, 10);

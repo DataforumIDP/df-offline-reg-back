@@ -18,6 +18,8 @@ export interface ProjectFieldConfig {
     type: ProjectFieldType;
     uniq: boolean;
     optional: boolean; // true = необязательное поле, false = обязательное
+    /** Значение по умолчанию для необязательных полей */
+    defaultValue?: any | null;
     maxLength?: number;
     listSettings?: ListSettings;
 }
@@ -87,6 +89,38 @@ export class ProjectFieldHelper {
                 }
                 if (!item.color || !/^#[0-9A-Fa-f]{6}$/.test(item.color)) {
                     return { valid: false, error: 'Цвет должен быть в формате HEX (#RRGGBB)' };
+                }
+            }
+        }
+
+        // Валидация defaultValue (если указан)
+        if ((config as any).defaultValue !== undefined) {
+            const dv = (config as any).defaultValue
+            if (dv !== null) {
+                switch (config.type) {
+                    case 'bool':
+                        if (typeof dv !== 'boolean') return { valid: false, error: 'defaultValue для bool должен быть boolean или null' };
+                        break;
+                    case 'list':
+                        if (!config.listSettings) return { valid: false, error: 'listSettings required for list type' };
+                        if (config.listSettings.multiple) {
+                            if (!Array.isArray(dv)) return { valid: false, error: 'defaultValue для множественного list должен быть массивом' };
+                        } else {
+                            if (typeof dv !== 'string') return { valid: false, error: 'defaultValue для list должен быть строкой' };
+                            if (config.listSettings.items && !config.listSettings.items.find(i => i.value === dv)) {
+                                return { valid: false, error: 'defaultValue не найден в items списка' };
+                            }
+                        }
+                        break;
+                    case 'text':
+                    case 'id':
+                    case 'img':
+                    case 'code':
+                        if (typeof dv !== 'string') return { valid: false, error: `defaultValue для типа ${config.type} должен быть строкой` };
+                        if (config.maxLength && typeof dv === 'string' && dv.length > config.maxLength) return { valid: false, error: 'defaultValue превышает maxLength' };
+                        break;
+                    default:
+                        break;
                 }
             }
         }

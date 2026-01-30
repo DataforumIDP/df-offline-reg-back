@@ -1,6 +1,9 @@
 import { BaseDAL } from "./_baseDAL";
 import { Participant } from "../models/participants";
 import { parseSearchQuery, buildSearchSQL } from "../utils/searchUtils";
+import { ProjectFieldsDAL } from "./projectFieldsDAL";
+
+const projectFieldsDAL = new ProjectFieldsDAL();
 
 export interface ParticipantsQuery {
     page?: string;
@@ -193,13 +196,41 @@ export class ParticipantsDAL extends BaseDAL {
         project_id: number;
         data: Record<string, any>;
     }): Promise<Participant> {
-        const [result] = await this.db<Participant>(this.tableName)
-            .insert({
-                project_id: data.project_id,
-                data: JSON.stringify(data.data),
-            } as any)
-            .returning("*");
-        return result;
+        // Получаем поля проекта и применяем defaultValue для отсутствующих/пустых ключей
+        try {
+            const fields = await projectFieldsDAL.getByProjectId(data.project_id);
+            const defaults: Record<string, any> = {};
+            for (const f of fields) {
+                const cfg: any = f.config || {};
+                if (cfg.optional && cfg.defaultValue !== undefined) {
+                    defaults[f.key] = cfg.defaultValue;
+                }
+            }
+
+            const finalData = { ...data.data };
+            for (const [k, dv] of Object.entries(defaults)) {
+                if (finalData[k] === undefined || finalData[k] === '') {
+                    finalData[k] = dv;
+                }
+            }
+
+            const [result] = await this.db<Participant>(this.tableName)
+                .insert({
+                    project_id: data.project_id,
+                    data: JSON.stringify(finalData),
+                } as any)
+                .returning("*");
+            return result;
+        } catch (err) {
+            // В случае ошибки просто применяем оригинальные данные
+            const [result] = await this.db<Participant>(this.tableName)
+                .insert({
+                    project_id: data.project_id,
+                    data: JSON.stringify(data.data),
+                } as any)
+                .returning("*");
+            return result;
+        }
     }
 
     /**
@@ -305,10 +336,28 @@ export class ParticipantsDAL extends BaseDAL {
      * Пакетное создание участников
      */
     async createBatch(projectId: number, dataList: Record<string, any>[]): Promise<Participant[]> {
-        const insertData = dataList.map(data => ({
-            project_id: projectId,
-            data: JSON.stringify(data),
-        }));
+        // Получаем поля проекта и применяем defaultValue
+        const fields = await projectFieldsDAL.getByProjectId(projectId);
+        const defaults: Record<string, any> = {};
+        for (const f of fields) {
+            const cfg: any = f.config || {};
+            if (cfg.optional && cfg.defaultValue !== undefined) {
+                defaults[f.key] = cfg.defaultValue;
+            }
+        }
+
+        const insertData = dataList.map(data => {
+            const final = { ...data };
+            for (const [k, dv] of Object.entries(defaults)) {
+                if (final[k] === undefined || final[k] === '') {
+                    final[k] = dv;
+                }
+            }
+            return {
+                project_id: projectId,
+                data: JSON.stringify(final),
+            };
+        });
 
         const results = await this.db<Participant>(this.tableName)
             .insert(insertData as any)
