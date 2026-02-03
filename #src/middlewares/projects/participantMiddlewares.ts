@@ -397,3 +397,20 @@ export const clearParticipantsMiddlewares = [
     inputValidationMiddleware,
     checkProjectAccess(false), // Только админы
 ];
+
+// ===== Поиск по коду =====
+
+const codeParam = param("code")
+    .notEmpty()
+    .withMessage("Код обязателен")
+    .isString()
+    .withMessage("Код должен быть строкой");
+
+// GET /projects/:projectId/code/:code - поиск участника по коду (админы и операторы)
+export const findByCodeMiddlewares = [
+    authenticateJWT(true),
+    projectIdParam,
+    codeParam,
+    inputValidationMiddleware,
+    checkProjectAccess(true),
+];

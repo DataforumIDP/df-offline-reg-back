@@ -22,6 +22,7 @@ export interface ProjectFieldConfig {
     defaultValue?: any | null;
     maxLength?: number;
     listSettings?: ListSettings;
+    random?: boolean; // true = генерировать случайные значения
 }
 
 // Интерфейс поля проекта
@@ -125,6 +126,13 @@ export class ProjectFieldHelper {
             }
         }
 
+        // Добавляем проверку для нового флага random
+        if (config.random) {
+            if (config.type !== 'code') {
+                return { valid: false, error: 'Флаг random можно использовать только для типа code' };
+            }
+        }
+
         return { valid: true };
     }
 
@@ -146,5 +154,15 @@ export class ProjectFieldHelper {
             .replace(/[^a-z0-9]/gi, '_')
             .replace(/_+/g, '_')
             .replace(/^_|_$/g, '');
+    }
+
+    // Метод для генерации случайного значения из 20 символов
+    static generateRandomValue(): string {
+        const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        let result = '';
+        for (let i = 0; i < 20; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
     }
 }

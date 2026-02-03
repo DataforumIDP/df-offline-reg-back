@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { ProjectService } from "../services/projectService";
 import { ProjectFieldService } from "../services/projectFieldService";
-import { ParticipantService } from "../services/participantService";
+import { ParticipantService, ParticipantCodeService } from "../services/participantService";
 import { participantLogService } from "../services/participantLogService";
 import { printTemplateService } from "../services/printTemplateService";
 import { webhookService } from "../services/webhookService";
@@ -28,6 +28,7 @@ import {
     excelImportMiddlewares,
     excelExportMiddlewares,
     clearParticipantsMiddlewares,
+    findByCodeMiddlewares,
 } from "../middlewares/projects/participantMiddlewares";
 import {
     assignTemplateMiddlewares,
@@ -40,6 +41,7 @@ export const projectsRouter = Router();
 const project = new ProjectService();
 const projectField = new ProjectFieldService();
 const participant = new ParticipantService();
+const participantCode = new ParticipantCodeService();
 
 // ===== Роуты проектов =====
 projectsRouter.post("/", createMiddlewares, project.create);
@@ -62,6 +64,9 @@ projectsRouter.delete("/:projectId/print-template", removeTemplateMiddlewares, p
 
 // ===== Роуты webhooks проекта =====
 projectsRouter.get("/:projectId/webhooks", getSchemeMiddlewares, webhookService.getByProject.bind(webhookService));
+
+// ===== Поиск участника по коду =====
+projectsRouter.get("/:projectId/code/:code", findByCodeMiddlewares, participantCode.findByCode.bind(participantCode));
 
 // ===== Роуты логов участников (должны быть ДО роутов с :participantId) =====
 projectsRouter.get("/:projectId/participants/log/stats", getLogsMiddlewares, participantLogService.getStats);

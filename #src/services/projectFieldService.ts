@@ -34,20 +34,62 @@ export class ProjectFieldService {
         const projectId = Number(req.params.projectId)
         const { key, label, config } = req.body
 
-        const [field, err] = await wrap(
-            fieldDAL.createField({
-                project_id: projectId,
-                label,
-                key,
-                config,
-            })
-        )
+        try {
+            const result = await db.transaction(async (trx: any) => {
+                // Создаём поле
+                const field = await trx('project_fields')
+                    .insert({
+                        project_id: projectId,
+                        label,
+                        key,
+                        config: JSON.stringify(config),
+                    })
+                    .returning('*')
+                    .then((rows: any[]) => rows[0])
 
-        if (err || !field) {
+                if (!field) {
+                    throw new Error('Failed to create field')
+                }
+
+                // Если тип code и random: true — генерируем случайные значения для существующих участников
+                if (config?.type === 'code' && config?.random === true) {
+                    // Проверяем безопасность ключа
+                    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+                        throw new Error('Invalid key format')
+                    }
+
+                    // Получаем всех участников проекта, у которых ещё нет этого ключа или значение пустое
+                    const participants = await trx('participants')
+                        .select('id', 'data')
+                        .where({ project_id: projectId })
+
+                    for (const participant of participants) {
+                        const currentData = participant.data || {}
+                        // Проверяем, нужно ли генерировать значение
+                        if (!currentData[key] || currentData[key] === '') {
+                            const newData = {
+                                ...currentData,
+                                [key]: ProjectFieldHelper.generateRandomValue(),
+                            }
+
+                            await trx('participants')
+                                .where({ id: participant.id })
+                                .update({
+                                    data: JSON.stringify(newData),
+                                    updated_at: trx.fn.now(),
+                                })
+                        }
+                    }
+                }
+
+                return field
+            })
+
+            response201(res, ProjectFieldHelper.toJSON(result))
+        } catch (e) {
+            console.error('[Create Field Error]', e)
             return dbError(res, '#CREATEFIELD1')
         }
-
-        response201(res, ProjectFieldHelper.toJSON(field))
     }
 
     /**
@@ -173,6 +215,35 @@ export class ProjectFieldService {
                 } catch (err) {
                     console.error('[DefaultValue Backfill Error]', err)
                     throw err
+                }
+
+                // Если тип code и random изменился на true — генерируем случайные значения для участников без значения
+                const oldRandom = (existing.config as any)?.random
+                const newRandom = (config as any)?.random
+                const configType = (config as any)?.type
+
+                if (configType === 'code' && newRandom === true && oldRandom !== true) {
+                    // Получаем участников, у которых нет значения для этого ключа
+                    const participantsToUpdate = await trx('participants')
+                        .select('id', 'data')
+                        .where({ project_id: projectId })
+                        .whereRaw(`NOT jsonb_exists(data, '${key}')`)
+                        .orWhereRaw(`COALESCE(data->>'${key}', '') = ''`)
+
+                    for (const participant of participantsToUpdate) {
+                        const currentData = participant.data || {}
+                        const newData = {
+                            ...currentData,
+                            [key]: ProjectFieldHelper.generateRandomValue(),
+                        }
+
+                        await trx('participants')
+                            .where({ id: participant.id })
+                            .update({
+                                data: JSON.stringify(newData),
+                                updated_at: trx.fn.now(),
+                            })
+                    }
                 }
 
                 return updated

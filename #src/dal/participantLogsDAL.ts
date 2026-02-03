@@ -59,6 +59,7 @@ export class ParticipantLogsDAL extends BaseDAL {
             UPDATE: 0,
             DELETE: 0,
             PRINT: 0,
+            uniqPrints: 0,
         };
 
         for (const row of result) {
@@ -66,7 +67,89 @@ export class ParticipantLogsDAL extends BaseDAL {
             stats[action] = Number((row as any).count);
         }
 
+        // Подсчёт уникальных печатей (несколько печатей одного участника считаются за 1)
+        const uniqPrintsResult = await this.db<ParticipantLog>(this.tableName)
+            .where({ project_id: projectId, action: 'PRINT' })
+            .whereNotNull('participant_id')
+            .countDistinct('participant_id as count')
+            .first();
+
+        stats.uniqPrints = Number((uniqPrintsResult as any)?.count || 0);
+
         return stats;
+    }
+
+    /**
+     * Получить количество уникальных печатей (по participant_id)
+     */
+    async getUniqPrintsCount(projectId: number): Promise<number> {
+        const result = await this.db<ParticipantLog>(this.tableName)
+            .where({ project_id: projectId, action: 'PRINT' })
+            .whereNotNull('participant_id')
+            .countDistinct('participant_id as count')
+            .first();
+
+        return Number((result as any)?.count || 0);
+    }
+
+    /**
+     * Получить все логи проекта без пагинации
+     */
+    async getAllByProjectId(
+        projectId: number,
+        query: Omit<LogsQuery, 'page' | 'limit'>
+    ): Promise<ParticipantLogWithUser[]> {
+        // Базовый запрос с JOIN на accounts
+        let baseQuery = this.db<ParticipantLog>(this.tableName)
+            .where({ [`${this.tableName}.project_id`]: projectId })
+            .leftJoin("accounts", `${this.tableName}.user_id`, "accounts.id")
+            .select(
+                `${this.tableName}.*`,
+                "accounts.login as user_login",
+                "accounts.name as user_name"
+            );
+
+        // Фильтр по action
+        if (query.action) {
+            baseQuery = baseQuery.where({ [`${this.tableName}.action`]: query.action });
+        }
+
+        // Фильтр по actor
+        if (query.actor) {
+            baseQuery = baseQuery.where({ [`${this.tableName}.actor`]: query.actor });
+        }
+
+        // Фильтр по участнику
+        if (query.participantId) {
+            baseQuery = baseQuery.where({ participant_id: parseInt(query.participantId, 10) });
+        }
+
+        // Фильтр по пользователю
+        if (query.userId) {
+            baseQuery = baseQuery.where({ [`${this.tableName}.user_id`]: parseInt(query.userId, 10) });
+        }
+
+        // Фильтр по датам
+        if (query.dateStart) {
+            baseQuery = baseQuery.where(`${this.tableName}.created_at`, ">=", new Date(query.dateStart));
+        }
+        if (query.dateEnd) {
+            const endDate = new Date(query.dateEnd);
+            endDate.setHours(23, 59, 59, 999);
+            baseQuery = baseQuery.where(`${this.tableName}.created_at`, "<=", endDate);
+        }
+
+        // Поиск по данным (ILIKE по JSON)
+        if (query.search && query.search.trim()) {
+            baseQuery = baseQuery.where(function() {
+                this.whereRaw(`participant_logs.current_data::text ILIKE ?`, [`%${query.search}%`])
+                    .orWhereRaw(`accounts.login ILIKE ?`, [`%${query.search}%`])
+                    .orWhereRaw(`accounts.name ILIKE ?`, [`%${query.search}%`]);
+            });
+        }
+
+        // Возвращаем все записи с сортировкой по дате (новые первые)
+        return baseQuery.orderBy(`${this.tableName}.created_at`, "DESC") as Promise<ParticipantLogWithUser[]>;
     }
 
     /**

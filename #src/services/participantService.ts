@@ -4,7 +4,7 @@ import { ParticipantsDAL } from "../dal/participantsDAL";
 import { participantLogsDAL } from "../dal/participantLogsDAL";
 import { ProjectFieldsDAL } from "../dal/projectFieldsDAL";
 import { ParticipantHelper } from "../models/participants";
-import { ProjectFieldConfig } from "../models/projectFields";
+import { ProjectFieldConfig, ProjectFieldHelper } from "../models/projectFields";
 import { dbError, errorSend } from "../utils/errors";
 import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
@@ -328,6 +328,27 @@ export class ParticipantService {
                 }
             }
 
+            // Генерируем случайные значения для полей типа code с random: true
+            for (const field of fields) {
+                if (field.config.type === 'code' && field.config.random === true) {
+                    // Генерируем только если значение не указано
+                    if (rowData[field.key] === undefined || rowData[field.key] === '') {
+                        rowData[field.key] = ProjectFieldHelper.generateRandomValue();
+                    }
+                }
+            }
+
+            // Применяем значения по умолчанию для полей с defaultValue
+            for (const field of fields) {
+                const config = field.config as any;
+                if (config.defaultValue !== undefined) {
+                    // Применяем только если значение не указано или пустое
+                    if (rowData[field.key] === undefined || rowData[field.key] === '') {
+                        rowData[field.key] = config.defaultValue;
+                    }
+                }
+            }
+
             // Проверка уникальности
             for (const field of fields) {
                 if (field.config.uniq && rowData[field.key] !== undefined) {
@@ -585,4 +606,57 @@ function validateRowData(
     }
 
     return errors;
+}
+
+/**
+ * Сервис для поиска участника по коду
+ */
+export class ParticipantCodeService {
+    /**
+     * GET /projects/:projectId/code/:code
+     * Поиск участника по коду в любом из полей типа code
+     */
+    async findByCode(req: Request, res: Response) {
+        const projectId = Number(req.params.projectId);
+        const code = req.params.code;
+
+        // Получаем схему проекта
+        const [fields, fieldsErr] = await wrap(fieldDAL.getByProjectId(projectId));
+        if (fieldsErr || !fields) {
+            return dbError(res, "#FINDBYCODE1");
+        }
+
+        // Находим все поля с типом code
+        const codeFields = fields.filter(f => f.config?.type === 'code');
+
+        if (codeFields.length === 0) {
+            return errorSend(
+                res,
+                { message: "В схеме проекта нет полей типа 'code'" },
+                { code: 400 }
+            );
+        }
+
+        // Получаем ключи полей
+        const codeFieldKeys = codeFields.map(f => f.key);
+
+        // Ищем участника
+        const [participant, searchErr] = await wrap(
+            participantDAL.findByCode(projectId, code, codeFieldKeys)
+        );
+
+        if (searchErr) {
+            return dbError(res, "#FINDBYCODE2");
+        }
+
+        if (!participant) {
+            return errorSend(
+                res,
+                { message: "Участник с указанным кодом не найден" },
+                { code: 404 }
+            );
+        }
+
+        res.json(ParticipantHelper.toJSON(participant));
+    }
 }

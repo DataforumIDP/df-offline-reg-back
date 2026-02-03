@@ -39,6 +39,7 @@ export interface LogStats {
     UPDATE: number;
     DELETE: number;
     PRINT: number;
+    uniqPrints: number;
 }
 
 export class ParticipantLogHelper {

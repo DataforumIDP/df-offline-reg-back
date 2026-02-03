@@ -61,6 +61,15 @@ export class ParticipantsDAL extends BaseDAL {
         return !existing;
     }
 
+    // Проверка уникальности значения в рамках проекта
+    async isValueUnique(projectId: number, fieldKey: string, value: string): Promise<boolean> {
+        const result = await this.db(this.tableName)
+            .where({ project_id: projectId, is_delete: false })
+            .whereRaw(`data->>'${fieldKey}' = ?`, [value])
+            .count();
+        return parseInt(String(result[0].count), 10) === 0;
+    }
+
     /**
      * Получить участников проекта с пагинацией и продвинутым поиском
      * 
@@ -363,5 +372,39 @@ export class ParticipantsDAL extends BaseDAL {
             .insert(insertData as any)
             .returning("*");
         return results;
+    }
+
+    /**
+     * Поиск участника по значению кода в любом из указанных полей
+     * @param projectId - ID проекта
+     * @param code - значение кода для поиска
+     * @param codeFieldKeys - массив ключей полей типа code
+     * @returns первый найденный участник или null
+     */
+    async findByCode(
+        projectId: number,
+        code: string,
+        codeFieldKeys: string[]
+    ): Promise<Participant | null> {
+        if (codeFieldKeys.length === 0) {
+            return null;
+        }
+
+        // Строим условие OR для всех полей типа code
+        let query = this.db<Participant>(this.tableName)
+            .where({ project_id: projectId, is_delete: false });
+
+        // Добавляем условие поиска по любому из полей
+        query = query.where(function() {
+            for (const fieldKey of codeFieldKeys) {
+                // Безопасность: проверяем формат ключа
+                if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(fieldKey)) {
+                    this.orWhereRaw(`data->>'${fieldKey}' = ?`, [code]);
+                }
+            }
+        });
+
+        const result = await query.first();
+        return result || null;
     }
 }
