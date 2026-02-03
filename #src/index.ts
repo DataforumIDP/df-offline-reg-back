@@ -7,6 +7,8 @@ import { accountsRouter } from "./routes/accountsRouter";
 import { projectsRouter } from "./routes/projectsRouter";
 import { printTemplatesRouter } from "./routes/printTemplatesRouter";
 import webhooksRouter from "./routes/webhooksRouter";
+import { zonesRouter } from "./routes/zonesRouter";
+import { scannerRouter } from "./routes/scannerRouter";
 
 const app = express();
 
@@ -27,6 +29,8 @@ app.use("/accounts", accountsRouter);
 app.use("/projects", projectsRouter);
 app.use("/print-templates", printTemplatesRouter);
 app.use("/webhooks", webhooksRouter);
+app.use("/zones", zonesRouter);
+app.use("/scanner", scannerRouter);
 
 app.use(_404Middleware);
 

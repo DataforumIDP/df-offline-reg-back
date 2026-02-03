@@ -1,0 +1,217 @@
+import { Request, Response } from "express";
+import { scannersDAL, scannerLogsDAL } from "../dal/scannersDAL";
+import { ScannerHelper, ScannerLogHelper, ScannerLogUploadItem } from "../models/scanners";
+import { ProjectHelper, Project } from "../models/projects";
+import { Zone } from "../models/zones";
+import { zonesDAL } from "../dal/zonesDAL";
+import { ProjectFieldsDAL } from "../dal/projectFieldsDAL";
+import { ProjectFieldHelper } from "../models/projectFields";
+import { ParticipantsDAL } from "../dal/participantsDAL";
+import { ParticipantHelper } from "../models/participants";
+import { dbError } from "../utils/errors";
+import { wrap } from "../utils/wrap";
+import { response201 } from "../utils/responses";
+
+const projectFieldsDAL = new ProjectFieldsDAL();
+const participantsDAL = new ParticipantsDAL();
+
+/**
+ * Сервис для работы со сканерами
+ */
+export class ScannerService {
+    /**
+     * POST /scanner/join/:projectSlug/zone/:zoneId
+     * Подключение сканера к проекту и зоне
+     */
+    async join(
+        req: Request & { project?: Project; zone?: Zone },
+        res: Response
+    ) {
+        const project = req.project!;
+        const zone = req.zone!;
+        const { scanner: scannerId } = req.body;
+
+        // Создаём или обновляем сканер
+        const [scannerResult, err] = await wrap(
+            scannersDAL.upsert({
+                scannerId,
+                projectId: project.id,
+                zoneId: zone.id,
+            })
+        );
+
+        if (err || !scannerResult) {
+            return dbError(res, "#SCANNER_JOIN1");
+        }
+
+        response201(res, {
+            message: "Сканер успешно подключен",
+            scanner: ScannerHelper.toJSON(scannerResult),
+        });
+    }
+
+    /**
+     * GET /scanner/project
+     * Получение сведений о проекте и схеме
+     */
+    async getProject(req: Request, res: Response) {
+        if (!req.scannerAuth) {
+            return res.status(401).json({ error: "Не авторизован" });
+        }
+
+        const project = req.scannerAuth.project;
+        const scanner = req.scannerAuth.scanner;
+
+        // Получаем схему полей
+        const [fields, err] = await wrap(
+            projectFieldsDAL.getByProjectId(project.id)
+        );
+
+        if (err) {
+            return dbError(res, "#SCANNER_PROJECT1");
+        }
+
+        // Получаем информацию о зоне сканера
+        let zone: { id: number; name: string; free: boolean } | null = null;
+        if (scanner) {
+            const [zoneData] = await wrap(zonesDAL.getById(scanner.zone_id));
+            if (zoneData) {
+                zone = {
+                    id: zoneData.id,
+                    name: zoneData.name,
+                    free: zoneData.free,
+                };
+            }
+        }
+
+        res.json({
+            project: ProjectHelper.toJSON(project),
+            scheme: fields?.map(ProjectFieldHelper.toJSON) || [],
+            zone,
+            scanner: scanner ? ScannerHelper.toJSON(scanner) : null,
+        });
+    }
+
+    /**
+     * GET /scanner/participants/code/:code
+     * Получение участника по коду
+     */
+    async getParticipantByCode(req: Request, res: Response) {
+        if (!req.scannerAuth) {
+            return res.status(401).json({ error: "Не авторизован" });
+        }
+
+        const project = req.scannerAuth.project;
+        const scanner = req.scannerAuth.scanner;
+        const { code } = req.params;
+
+        // Получаем поля типа code из схемы
+        const [fields, fieldsErr] = await wrap(
+            projectFieldsDAL.getByProjectId(project.id)
+        );
+
+        if (fieldsErr) {
+            return dbError(res, "#SCANNER_CODE0");
+        }
+
+        const codeFieldKeys = (fields || [])
+            .filter((f) => f.config.type === "code")
+            .map((f) => f.key);
+
+        if (codeFieldKeys.length === 0) {
+            return res.status(400).json({
+                error: "В проекте нет полей типа code",
+                code: "NO_CODE_FIELDS",
+            });
+        }
+
+        // Ищем участника по коду
+        const [participant, err] = await wrap(
+            participantsDAL.findByCode(project.id, code, codeFieldKeys)
+        );
+
+        if (err) {
+            return dbError(res, "#SCANNER_CODE1");
+        }
+
+        if (!participant) {
+            return res.status(404).json({
+                error: "Участник не найден",
+                code: "PARTICIPANT_NOT_FOUND",
+            });
+        }
+
+        // Проверяем доступ к зоне (если зона не free)
+        let zoneAccess: { allowed: boolean; reason: string; value?: any } | null = null;
+        if (scanner) {
+            const [zone] = await wrap(zonesDAL.getByIdWithRules(scanner.zone_id));
+            if (zone) {
+                if (zone.free) {
+                    zoneAccess = { allowed: true, reason: "free_zone" };
+                } else {
+                    // Проверяем правила доступа
+                    const rulesField = project.rules_field;
+                    if (rulesField && participant.data[rulesField]) {
+                        const participantValue = participant.data[rulesField];
+                        const hasAccess = zone.rules.some(
+                            (rule: { list_item: string }) => rule.list_item === participantValue
+                        );
+                        zoneAccess = {
+                            allowed: hasAccess,
+                            reason: hasAccess ? "rule_match" : "no_rule_match",
+                            value: participantValue,
+                        };
+                    } else {
+                        zoneAccess = { allowed: false, reason: "no_rules_field" };
+                    }
+                }
+            }
+        }
+
+        res.json({
+            participant: ParticipantHelper.toJSON(participant),
+            zoneAccess,
+        });
+    }
+
+    /**
+     * POST /scanner/logs/upload
+     * Выгрузка логов сканера
+     */
+    async uploadLogs(req: Request, res: Response) {
+        if (!req.scannerAuth) {
+            return res.status(401).json({ error: "Не авторизован" });
+        }
+
+        const project = req.scannerAuth.project;
+        const scanner = req.scannerAuth.scanner;
+        const { logs } = req.body as { logs: ScannerLogUploadItem[] };
+
+        // Преобразуем логи для вставки
+        const logsToInsert = logs.map((log) => ({
+            projectId: project.id,
+            zoneId: log.zone,
+            scannerId: scanner?.id,
+            userCode: log.userCode,
+            timestamp: log.timestamp,
+            direction: log.direction,
+            hash: log.hash,
+        }));
+
+        // Массовая вставка
+        const [result, err] = await wrap(scannerLogsDAL.bulkCreate(logsToInsert));
+
+        if (err) {
+            return dbError(res, "#SCANNER_UPLOAD1");
+        }
+
+        res.json({
+            message: "Логи обработаны",
+            inserted: result?.inserted || 0,
+            skipped: result?.skipped || 0,
+            total: logs.length,
+        });
+    }
+}
+
+export const scannerService = new ScannerService();

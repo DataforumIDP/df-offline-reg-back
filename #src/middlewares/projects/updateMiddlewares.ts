@@ -31,11 +31,18 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
         "dateStart",
         "dateEnd",
         "isOperatorEditable",
+        "rulesField",
     ]);
 
     // Преобразуем даты в Date объекты если они есть
     if (data.dateStart) data.dateStart = new Date(data.dateStart);
     if (data.dateEnd) data.dateEnd = new Date(data.dateEnd);
+
+    // Преобразуем rulesField в rules_field для БД
+    if ('rulesField' in data) {
+        data.rules_field = data.rulesField;
+        delete data.rulesField;
+    }
 
     req.body = data;
     next();

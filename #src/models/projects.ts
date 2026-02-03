@@ -6,6 +6,8 @@ export interface Project {
     dateStart: Date;
     dateEnd: Date;
     isOperatorEditable: boolean;
+    rulesField: string | null; // Поле (список) для проверки доступа в зоны
+    rules_field?: string | null; // snake_case версия из БД
     isDelete: boolean;
     createdAt: Date;
     updatedAt: Date;
@@ -21,6 +23,7 @@ export class ProjectHelper {
             dateStart: project.dateStart,
             dateEnd: project.dateEnd,
             isOperatorEditable: project.isOperatorEditable,
+            rulesField: project.rulesField ?? project.rules_field ?? null,
         };
     }
 
