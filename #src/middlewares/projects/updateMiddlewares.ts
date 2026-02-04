@@ -32,6 +32,7 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
         "dateEnd",
         "isOperatorEditable",
         "rulesField",
+        "scanMode",
     ]);
 
     // Преобразуем даты в Date объекты если они есть
@@ -42,6 +43,12 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
     if ('rulesField' in data) {
         data.rules_field = data.rulesField;
         delete data.rulesField;
+    }
+
+    // Преобразуем scanMode в scan_mode для БД
+    if ('scanMode' in data) {
+        data.scan_mode = data.scanMode;
+        delete data.scanMode;
     }
 
     req.body = data;

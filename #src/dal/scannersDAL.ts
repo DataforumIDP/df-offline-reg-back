@@ -148,20 +148,37 @@ export class ScannersDAL {
     }
 
     /**
-     * Получить все сканеры зоны с количеством логов
+     * Получить все сканеры зоны с количеством логов для этой зоны
+     * Включает:
+     * - Сканеры, прикреплённые к зоне (zone_id === zoneId)
+     * - Сканеры, имеющие логи для этой зоны (могут быть сейчас на другой зоне)
+     * Считает только логи для указанной зоны
      */
     async getByZoneIdWithLogsCount(
         zoneId: number
     ): Promise<(Scanner & { logsCount: number })[]> {
+        const tableName = this.table;
         const results = await db(this.table)
             .select(
                 `${this.table}.*`,
                 db.raw("COALESCE(COUNT(scanner_logs.id), 0)::int as logs_count")
             )
-            .leftJoin("scanner_logs", `${this.table}.id`, "scanner_logs.scanner_id")
-            .where(`${this.table}.zone_id`, zoneId)
+            .leftJoin("scanner_logs", function() {
+                this.on(`${tableName}.id`, "scanner_logs.scanner_id")
+                    .andOn("scanner_logs.zone_id", db.raw("?", [zoneId]));
+            })
+            .where(function() {
+                // Сканер прикреплён к этой зоне ИЛИ имеет логи для неё
+                this.where(`${tableName}.zone_id`, zoneId)
+                    .orWhereExists(function() {
+                        this.select(db.raw("1"))
+                            .from("scanner_logs as sl")
+                            .whereRaw(`sl.scanner_id = ${tableName}.id`)
+                            .andWhere("sl.zone_id", zoneId);
+                    });
+            })
             .groupBy(`${this.table}.id`)
-            .orderBy(`${this.table}.created_at`, "desc");
+            .orderBy("logs_count", "desc");
 
         return results.map((r: any) => ({
             ...r,

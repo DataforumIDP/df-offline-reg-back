@@ -7,6 +7,10 @@ import { ProjectsDAL } from "../dal/projectsDAL";
 import { dbError } from "../utils/errors";
 import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
+import dotenv from 'dotenv'
+dotenv.config()
+
+const { API_HOST } = process.env
 
 const projectsDAL = new ProjectsDAL();
 
@@ -184,9 +188,11 @@ class ZoneService {
             return dbError(res, "#GETCONFIG2");
         }
 
+        console.log(API_HOST);
+        
         // Формируем конфиг
         const config: ScannerConfig = {
-            server: process.env.API_HOST || "localhost:3000",
+            server: API_HOST || "localhost:3000",
             project: project.slug,
             zone: zone.id,
             authorize: {
@@ -194,6 +200,7 @@ class ZoneService {
                 secret: auth.secret_key,
             },
         };
+
 
         res.json(config);
     }
@@ -217,6 +224,7 @@ class ZoneService {
             (scanners || []).map((s) => ({
                 ...ScannerHelper.toJSON(s),
                 logsCount: s.logsCount,
+                isCurrentZone: s.zone_id === zone.id,
             }))
         );
     }

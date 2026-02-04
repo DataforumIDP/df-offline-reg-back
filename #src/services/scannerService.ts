@@ -71,16 +71,20 @@ export class ScannerService {
             return dbError(res, "#SCANNER_PROJECT1");
         }
 
-        // Получаем информацию о зоне сканера
-        let zone: { id: number; name: string; free: boolean } | null = null;
+        // Получаем информацию о зоне сканера (с правилами если не free)
+        let zone: { id: number; name: string; free: boolean; rules?: string[] } | null = null;
         if (scanner) {
-            const [zoneData] = await wrap(zonesDAL.getById(scanner.zone_id));
+            const [zoneData] = await wrap(zonesDAL.getByIdWithRules(scanner.zone_id));
             if (zoneData) {
                 zone = {
                     id: zoneData.id,
                     name: zoneData.name,
                     free: zoneData.free,
                 };
+                // Добавляем правила для зон с ограниченным доступом
+                if (!zoneData.free && zoneData.rules) {
+                    zone.rules = zoneData.rules.map((r: { list_item: string }) => r.list_item);
+                }
             }
         }
 

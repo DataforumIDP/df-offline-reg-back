@@ -18,7 +18,7 @@ export const scannerRouter = Router();
 scannerRouter.post(
     "/join/:projectSlug/zone/:zoneId",
     joinMiddlewares,
-    scannerService.join.bind(scannerService)
+    scannerService.join
 );
 
 /**
@@ -29,7 +29,7 @@ scannerRouter.post(
 scannerRouter.get(
     "/project",
     scannerGetProjectMiddlewares,
-    scannerService.getProject.bind(scannerService)
+    scannerService.getProject
 );
 
 /**
@@ -40,7 +40,7 @@ scannerRouter.get(
 scannerRouter.get(
     "/participants/code/:code",
     scannerGetParticipantMiddlewares,
-    scannerService.getParticipantByCode.bind(scannerService)
+    scannerService.getParticipantByCode
 );
 
 /**
@@ -52,5 +52,5 @@ scannerRouter.get(
 scannerRouter.post(
     "/logs/upload",
     scannerUploadLogsMiddlewares,
-    scannerService.uploadLogs.bind(scannerService)
+    scannerService.uploadLogs
 );
