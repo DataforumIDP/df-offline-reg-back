@@ -14,8 +14,8 @@ const config: { [key: string]: Knex.Config } = {
       password: process.env.DB_ENV_PASSWORD,
     },
     migrations: {
-      directory: './migrations',
-      extension: 'ts'
+      directory: require.extensions['.ts'] ? './migrations' : './dist/migrations',
+      extension: require.extensions['.ts'] ? 'ts' : 'js'
     },
     seeds: {
       directory: './seeds',
@@ -32,8 +32,8 @@ const config: { [key: string]: Knex.Config } = {
       password: process.env.DB_ENV_PASSWORD,
     },
     migrations: {
-      directory: './migrations',
-      extension: 'ts'
+      directory: './dist/migrations',
+      extension: 'js'
     },
     seeds: {
       directory: './seeds',
