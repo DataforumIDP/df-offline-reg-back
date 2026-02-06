@@ -81,7 +81,7 @@ export class ProjectsDAL extends BaseDAL {
         }
 
         query = query
-            .orderBy('dateStart', 'asc')
+            .orderBy('dateStart', 'desc')
             .limit(limit || 20)
             .offset(offset);
 

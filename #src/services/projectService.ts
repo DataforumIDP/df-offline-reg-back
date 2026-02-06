@@ -2,6 +2,9 @@ import { Request, Response } from "express";
 import { ReqWithBody, ReqWithParams, ReqWithQuery } from "../baseTypes";
 import { ProjectsDAL as pDAL } from "../dal/projectsDAL";
 import { ProjectFieldsDAL } from "../dal/projectFieldsDAL";
+import { ParticipantLogsDAL } from "../dal/participantLogsDAL";
+import { ParticipantsDAL } from "../dal/participantsDAL";
+import { db } from "../config/db";
 import { dbError } from "../utils/errors";
 import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
@@ -14,6 +17,8 @@ import { generateRandomString } from "../utils/generateRandomString";
 
 const ProjectDAL = new pDAL();
 const fieldDAL = new ProjectFieldsDAL();
+const participantLogsDAL = new ParticipantLogsDAL();
+const participantsDAL = new ParticipantsDAL();
 
 export class ProjectService {
     async create(
@@ -84,13 +89,36 @@ export class ProjectService {
     ) {
         const [projects, meta] = await ProjectDAL.get(req.query);
 
-        if (!projects) return dbError(res, "#GETProj1");
+        if (!projects || !Array.isArray(projects)) return dbError(res, "#GETProj1");
 
-        const list = Array.isArray(projects) ? projects.map(ProjectHelper.toJSON) : [];
+        // Получаем статистику для каждого проекта
+        const projectsWithStats = await Promise.all(
+            projects.map(async (project) => {
+                // Получаем количество участников
+                const participantsCount = await db('participants')
+                    .where({ project_id: project.id, is_delete: false })
+                    .count('* as count')
+                    .first();
+
+                // Получаем количество печатей
+                const printingsCount = await db('participant_logs')
+                    .where({ project_id: project.id, action: 'PRINT' })
+                    .count('* as count')
+                    .first();
+
+                return {
+                    ...ProjectHelper.toJSON(project),
+                    stats: {
+                        participants: Number((participantsCount as any)?.count || 0),
+                        printings: Number((printingsCount as any)?.count || 0),
+                    }
+                };
+            })
+        );
 
         res.json(
             paginationResponse({
-                list,
+                list: projectsWithStats,
                 all: Array.isArray(meta) ? 0 : meta.total,
                 limit: req.query.limit,
                 page: req.query.page,
