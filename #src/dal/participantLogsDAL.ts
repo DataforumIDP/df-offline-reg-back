@@ -93,6 +93,24 @@ export class ParticipantLogsDAL extends BaseDAL {
     }
 
     /**
+     * Получить количество печатей по каждому участнику
+     */
+    async getPrintCountsByParticipant(projectId: number): Promise<Map<number, number>> {
+        const result = await this.db<ParticipantLog>(this.tableName)
+            .where({ project_id: projectId, action: 'PRINT' })
+            .whereNotNull('participant_id')
+            .select('participant_id')
+            .count('id as count')
+            .groupBy('participant_id');
+
+        const map = new Map<number, number>();
+        for (const row of result) {
+            map.set(Number(row.participant_id), Number((row as any).count));
+        }
+        return map;
+    }
+
+    /**
      * Получить все логи проекта без пагинации
      */
     async getAllByProjectId(
@@ -272,6 +290,16 @@ export class ParticipantLogsDAL extends BaseDAL {
     async deleteAllByProject(projectId: number): Promise<number> {
         const result = await this.db<ParticipantLog>(this.tableName)
             .where({ project_id: projectId })
+            .del();
+        return result;
+    }
+
+    /**
+     * Удалить только логи печати (action = 'PRINT')
+     */
+    async deletePrintLogs(projectId: number): Promise<number> {
+        const result = await this.db<ParticipantLog>(this.tableName)
+            .where({ project_id: projectId, action: 'PRINT' })
             .del();
         return result;
     }

@@ -312,6 +312,44 @@ export class ScannerLogsDAL {
             total: parseInt(result?.total || '0', 10),
         };
     }
+
+    /**
+     * Удалить все логи сканеров по проекту
+     */
+    async deleteAllByProject(projectId: number): Promise<number> {
+        const result = await db(this.table)
+            .where({ project_id: projectId })
+            .del();
+        return result;
+    }
+
+    /**
+     * Получить логи для экспорта с фильтрацией
+     */
+    async getLogsForExport(params: {
+        projectId: number;
+        zoneIds?: number[];
+        timeStart?: Date;
+        timeEnd?: Date;
+    }): Promise<ScannerLog[]> {
+        let query = db(this.table)
+            .where({ project_id: params.projectId })
+            .orderBy("timestamp", "asc");
+
+        if (params.zoneIds && params.zoneIds.length > 0) {
+            query = query.whereIn("zone_id", params.zoneIds);
+        }
+
+        if (params.timeStart) {
+            query = query.where("timestamp", ">=", params.timeStart);
+        }
+
+        if (params.timeEnd) {
+            query = query.where("timestamp", "<=", params.timeEnd);
+        }
+
+        return query;
+    }
 }
 
 // Экспорт синглтонов

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { participantLogsDAL, LogsQuery } from "../dal/participantLogsDAL";
+import { scannerLogsDAL } from "../dal/scannersDAL";
 import { ParticipantLogHelper } from "../models/participantLogs";
 import { wrap } from "../utils/wrap";
 import { dbError } from "../utils/errors";
@@ -76,6 +77,46 @@ class ParticipantLogService {
 
         res.json({
             logs: logs.map(ParticipantLogHelper.toJSON),
+        });
+    }
+
+    /**
+     * DELETE /projects/:projectId/prints
+     * Очистить отметки печати (логи с action = 'PRINT')
+     */
+    async clearPrintMarks(req: Request, res: Response) {
+        const projectId = Number(req.params.projectId);
+
+        const [deleted, err] = await wrap(participantLogsDAL.deletePrintLogs(projectId));
+
+        if (err) {
+            return dbError(res, "#CLEARPRINTMARKS1");
+        }
+
+        res.json({
+            success: true,
+            deleted,
+            message: `Удалено ${deleted} отметок печати`,
+        });
+    }
+
+    /**
+     * DELETE /projects/:projectId/scanners/logs
+     * Очистить логи сканеров
+     */
+    async clearScannerLogs(req: Request, res: Response) {
+        const projectId = Number(req.params.projectId);
+
+        const [deleted, err] = await wrap(scannerLogsDAL.deleteAllByProject(projectId));
+
+        if (err) {
+            return dbError(res, "#CLEARSCANNERLOGS1");
+        }
+
+        res.json({
+            success: true,
+            deleted,
+            message: `Удалено ${deleted} записей логов сканеров`,
         });
     }
 }

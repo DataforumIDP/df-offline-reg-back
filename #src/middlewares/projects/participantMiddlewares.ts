@@ -398,6 +398,30 @@ export const clearParticipantsMiddlewares = [
     checkProjectAccess(false), // Только админы
 ];
 
+// DELETE /projects/:projectId/prints - очистка отметок печати (только админы)
+export const clearPrintMarksMiddlewares = [
+    authenticateJWT(true),
+    projectIdParam,
+    inputValidationMiddleware,
+    checkProjectAccess(false), // Только админы
+];
+
+// DELETE /projects/:projectId/scanners/logs - очистка логов сканеров (только админы)
+export const clearScannerLogsMiddlewares = [
+    authenticateJWT(true),
+    projectIdParam,
+    inputValidationMiddleware,
+    checkProjectAccess(false), // Только админы
+];
+
+// POST /projects/:projectId/scans/excel - экспорт статистики сканирований (только админы)
+export const exportScansMiddlewares = [
+    authenticateJWT(true),
+    projectIdParam,
+    inputValidationMiddleware,
+    checkProjectAccess(false), // Только админы
+];
+
 // ===== Поиск по коду =====
 
 const codeParam = param("code")

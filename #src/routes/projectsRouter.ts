@@ -3,6 +3,7 @@ import { ProjectService } from "../services/projectService";
 import { ProjectFieldService } from "../services/projectFieldService";
 import { ParticipantService, ParticipantCodeService } from "../services/participantService";
 import { participantLogService } from "../services/participantLogService";
+import { scanExportService } from "../services/scanExportService";
 import { printTemplateService } from "../services/printTemplateService";
 import { webhookService } from "../services/webhookService";
 import { createMiddlewares } from "../middlewares/projects/createMiddlewares";
@@ -28,6 +29,9 @@ import {
     excelImportMiddlewares,
     excelExportMiddlewares,
     clearParticipantsMiddlewares,
+    clearPrintMarksMiddlewares,
+    clearScannerLogsMiddlewares,
+    exportScansMiddlewares,
     findByCodeMiddlewares,
 } from "../middlewares/projects/participantMiddlewares";
 import {
@@ -77,6 +81,13 @@ projectsRouter.get("/:projectId/participants/excel", excelTemplateMiddlewares, p
 projectsRouter.post("/:projectId/participants/excel", excelImportMiddlewares, participant.importFromExcel);
 projectsRouter.get("/:projectId/participants/export", excelExportMiddlewares, participant.exportToExcel);
 projectsRouter.delete("/:projectId/participants", clearParticipantsMiddlewares, participant.clearAll);
+
+// ===== Очистка отметок печати и логов сканеров =====
+projectsRouter.delete("/:projectId/prints", clearPrintMarksMiddlewares, participantLogService.clearPrintMarks);
+projectsRouter.delete("/:projectId/scanners/logs", clearScannerLogsMiddlewares, participantLogService.clearScannerLogs);
+
+// ===== Экспорт статистики сканирований =====
+projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExportService.exportScansToExcel.bind(scanExportService));
 
 // ===== Роуты участников проекта =====
 projectsRouter.get("/:projectId/participants", getParticipantsMiddlewares, participant.getAll);
