@@ -47,9 +47,22 @@ export class ParticipantLogsDAL extends BaseDAL {
     /**
      * Получить статистику по действиям
      */
-    async getStats(projectId: number): Promise<LogStats> {
-        const result = await this.db<ParticipantLog>(this.tableName)
-            .where({ project_id: projectId })
+    async getStats(projectId: number, dateStart?: string, dateEnd?: string): Promise<LogStats> {
+        let baseQuery = this.db<ParticipantLog>(this.tableName)
+            .where({ project_id: projectId });
+
+        // Фильтр по датам
+        if (dateStart) {
+            baseQuery = baseQuery.where(`${this.tableName}.created_at`, ">=", new Date(dateStart));
+        }
+        if (dateEnd) {
+            const endDate = new Date(dateEnd);
+            endDate.setHours(23, 59, 59, 999);
+            baseQuery = baseQuery.where(`${this.tableName}.created_at`, "<=", endDate);
+        }
+
+        const result = await baseQuery
+            .clone()
             .select("action")
             .count("id as count")
             .groupBy("action");
@@ -68,9 +81,20 @@ export class ParticipantLogsDAL extends BaseDAL {
         }
 
         // Подсчёт уникальных печатей (несколько печатей одного участника считаются за 1)
-        const uniqPrintsResult = await this.db<ParticipantLog>(this.tableName)
+        let uniqPrintsQuery = this.db<ParticipantLog>(this.tableName)
             .where({ project_id: projectId, action: 'PRINT' })
-            .whereNotNull('participant_id')
+            .whereNotNull('participant_id');
+
+        if (dateStart) {
+            uniqPrintsQuery = uniqPrintsQuery.where(`${this.tableName}.created_at`, ">=", new Date(dateStart));
+        }
+        if (dateEnd) {
+            const endDate = new Date(dateEnd);
+            endDate.setHours(23, 59, 59, 999);
+            uniqPrintsQuery = uniqPrintsQuery.where(`${this.tableName}.created_at`, "<=", endDate);
+        }
+
+        const uniqPrintsResult = await uniqPrintsQuery
             .countDistinct('participant_id as count')
             .first();
 

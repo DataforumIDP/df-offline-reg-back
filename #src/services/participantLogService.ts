@@ -17,7 +17,10 @@ class ParticipantLogService {
             return res.status(400).json({ error: "Project ID is required" });
         }
 
-        const [stats, err] = await wrap(participantLogsDAL.getStats(projectId));
+        const dateStart = req.query.dateStart as string | undefined;
+        const dateEnd = req.query.dateEnd as string | undefined;
+
+        const [stats, err] = await wrap(participantLogsDAL.getStats(projectId, dateStart, dateEnd));
 
         if (err || !stats) {
             return dbError(res, "#GETSTATS1");
