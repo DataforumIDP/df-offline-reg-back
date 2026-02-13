@@ -52,8 +52,42 @@ export class ParticipantService {
      */
     async create(req: Request, res: Response) {
         const projectId = Number(req.params.projectId);
-        const data = req.body;
+        const data = { ...req.body };
         const userId = req.account?.id || null;
+
+        // Получаем схему проекта для генерации автоматических полей
+        const [fields] = await wrap(fieldDAL.getByProjectId(projectId));
+        if (fields) {
+            // Генерируем случайные значения для полей типа code с random: true
+            for (const field of fields) {
+                if (field.config.type === 'code' && field.config.random === true) {
+                    // Генерируем только если значение не указано
+                    if (data[field.key] === undefined || data[field.key] === '') {
+                        data[field.key] = ProjectFieldHelper.generateRandomValue();
+                    }
+                }
+            }
+
+            // Применяем значения по умолчанию для полей с defaultValue
+            for (const field of fields) {
+                const config = field.config as any;
+                if (config.defaultValue !== undefined) {
+                    if (data[field.key] === undefined || data[field.key] === '') {
+                        data[field.key] = config.defaultValue;
+                    }
+                }
+            }
+
+            // Генерируем ID для полей типа id
+            for (const field of fields) {
+                if (field.config.type === 'id') {
+                    if (data[field.key] === undefined || data[field.key] === '') {
+                        const [maxId] = await wrap(participantDAL.getMaxIdFieldValue(projectId, field.key));
+                        data[field.key] = (maxId || 0) + 1;
+                    }
+                }
+            }
+        }
 
         const [participant, err] = await wrap(participantDAL.create({
             project_id: projectId,
