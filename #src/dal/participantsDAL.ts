@@ -1,6 +1,6 @@
 import { BaseDAL } from "./_baseDAL";
 import { Participant } from "../models/participants";
-import { parseSearchQuery, buildSearchSQL } from "../utils/searchUtils";
+import { parseSearchQuery, buildSearchSQL, buildRelevanceSQL } from "../utils/searchUtils";
 import { ProjectFieldsDAL } from "./projectFieldsDAL";
 
 const projectFieldsDAL = new ProjectFieldsDAL();
@@ -139,14 +139,15 @@ export class ParticipantsDAL extends BaseDAL {
         }
 
         // Продвинутый поиск
+        let searchParsed: ReturnType<typeof parseSearchQuery> | null = null;
         if (query.search && query.search.trim()) {
-            const parsed = parseSearchQuery(query.search);
-            const { sql, params } = buildSearchSQL(parsed);
+            searchParsed = parseSearchQuery(query.search);
+            const { sql, params } = buildSearchSQL(searchParsed);
 
             // Отладка: выводим сгенерированный SQL
             console.log('[Search Debug]', {
                 originalQuery: query.search,
-                parsed: JSON.stringify(parsed, null, 2),
+                parsed: JSON.stringify(searchParsed, null, 2),
                 sql,
                 params
             });
@@ -166,7 +167,32 @@ export class ParticipantsDAL extends BaseDAL {
         // Получаем записи с сортировкой
         let recordsQuery = baseQuery.clone().offset(offset).limit(limit);
         
-        if (order === "id" || order === "created_at" || order === "updated_at") {
+        // При поиске сортируем по релевантности, если не указана явная сортировка 
+        // (order=id с direction=ASC считается дефолтной, игнорируем её при поиске)
+        const isDefaultOrder = order === 'id' && direction === 'ASC';
+        const useRelevanceSort = searchParsed && (isDefaultOrder || query.order === undefined);
+        
+        if (useRelevanceSort && searchParsed) {
+            const { sql: relevanceSql, params: relevanceParams } = buildRelevanceSQL(searchParsed);
+            if (relevanceSql !== '0') {
+                // DEBUG: Выводим баллы релевантности для первых 10 записей
+                const debugQuery = baseQuery.clone()
+                    .select('id', 'data')
+                    .select(this.db.raw(`${relevanceSql} as relevance_score`, relevanceParams))
+                    .orderByRaw(`${relevanceSql} DESC`, relevanceParams)
+                    .limit(10);
+                const debugResults = await debugQuery;
+                console.log('[Relevance Debug] Top 10 scores:');
+                debugResults.forEach((r: any, i: number) => {
+                    const name = r.data?.name || r.data?.firstName || 'N/A';
+                    const surname = r.data?.surname || r.data?.lastName || r.data?.name2 || '';
+                    console.log(`  ${i + 1}. ID=${r.id}, Score=${r.relevance_score}, Name="${name} ${surname}"`);
+                });
+                
+                // Сортировка по релевантности (DESC - более релевантные первыми)
+                recordsQuery = recordsQuery.orderByRaw(`${relevanceSql} DESC`, relevanceParams);
+            }
+        } else if (order === "id" || order === "created_at" || order === "updated_at") {
             recordsQuery = recordsQuery.orderBy(order, direction);
         } else {
             // Сортировка по полю в JSONB

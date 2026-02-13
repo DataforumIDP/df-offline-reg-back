@@ -187,3 +187,68 @@ export function buildSearchSQL(parsed: ParsedSearch): { sql: string; params: (st
         params: allParams,
     };
 }
+
+/**
+ * Построить SQL для вычисления релевантности поиска
+ * Используется для сортировки результатов по релевантности
+ * 
+ * Релевантность складывается из:
+ * - Точное совпадение значения поля (100 баллов) - "Иванов" = "Иванов"
+ * - Точное вхождение подстроки в отдельное поле (50 баллов) - "Иванов" содержится в поле
+ * - Совпадение в JSON как тексте (20 баллов) - запасной вариант
+ * - Триграммная схожесть (0-5 баллов) - нечёткий поиск с опечатками
+ * - Совпадение цифр телефона (30 баллов)
+ */
+export function buildRelevanceSQL(parsed: ParsedSearch): { sql: string; params: (string | number)[] } {
+    if (parsed.orGroups.length === 0) {
+        return { sql: '0', params: [] };
+    }
+
+    const allParams: (string | number)[] = [];
+    const relevanceParts: string[] = [];
+
+    for (const group of parsed.orGroups) {
+        for (const condition of group.conditions) {
+            // Бонус за ТОЧНОЕ совпадение значения поля (регистронезависимо) = 100 баллов
+            // Например: поле "name" = "Иванов" при поиске "Иванов"
+            relevanceParts.push(`COALESCE((SELECT COUNT(*) * 100 FROM jsonb_each_text(data) jt WHERE LOWER(jt.value) = LOWER(?)), 0)`);
+            allParams.push(condition.value);
+
+            // Бонус за вхождение подстроки В ОТДЕЛЬНОЕ ПОЛЕ = 50 баллов
+            // Например: поле содержит "Иванов Иван Иванович"
+            relevanceParts.push(`COALESCE((SELECT COUNT(*) * 50 FROM jsonb_each_text(data) jt WHERE jt.value ILIKE ?), 0)`);
+            allParams.push(`%${condition.value}%`);
+
+            // Совпадение в JSON как тексте = 20 баллов (запасной)
+            relevanceParts.push(`CASE WHEN data::text ILIKE ? THEN 20 ELSE 0 END`);
+            allParams.push(`%${condition.value}%`);
+
+            // Совпадение с конвертированной раскладкой
+            if (condition.convertedValue !== condition.value) {
+                // Точное совпадение поля = 100 баллов
+                relevanceParts.push(`COALESCE((SELECT COUNT(*) * 100 FROM jsonb_each_text(data) jt WHERE LOWER(jt.value) = LOWER(?)), 0)`);
+                allParams.push(condition.convertedValue);
+                
+                // Вхождение в поле = 50 баллов
+                relevanceParts.push(`COALESCE((SELECT COUNT(*) * 50 FROM jsonb_each_text(data) jt WHERE jt.value ILIKE ?), 0)`);
+                allParams.push(`%${condition.convertedValue}%`);
+            }
+
+            // Триграммная релевантность = максимальная similarity (0-1) * 5
+            // Имеет малый вес, чтобы не перебивать точные совпадения
+            relevanceParts.push(`COALESCE((SELECT MAX(similarity(jt.value, ?)) * 5 FROM jsonb_each_text(data) jt), 0)`);
+            allParams.push(condition.value);
+
+            // Совпадение цифр телефона = 30 баллов
+            if (condition.digitsOnly && condition.digitsOnly.length >= 4) {
+                relevanceParts.push(`CASE WHEN extract_digits(data::text) LIKE ? THEN 30 ELSE 0 END`);
+                allParams.push(`%${condition.digitsOnly}%`);
+            }
+        }
+    }
+
+    return {
+        sql: `(${relevanceParts.join(' + ')})`,
+        params: allParams,
+    };
+}
