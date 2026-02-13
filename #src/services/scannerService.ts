@@ -213,6 +213,7 @@ export class ScannerService {
             message: "Логи обработаны",
             inserted: result?.inserted || 0,
             skipped: result?.skipped || 0,
+            errors: result?.errors || 0,
             total: logs.length,
         });
     }

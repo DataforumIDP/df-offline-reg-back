@@ -244,22 +244,32 @@ export class ScannerLogsDAL {
     }
 
     /**
-     * Массовая вставка логов (с пропуском дубликатов)
+     * Массовая вставка логов (с пропуском дубликатов и невалидных записей)
      */
-    async bulkCreate(logs: CreateScannerLogDTO[]): Promise<{ inserted: number; skipped: number }> {
+    async bulkCreate(logs: CreateScannerLogDTO[]): Promise<{ inserted: number; skipped: number; errors: number }> {
         let inserted = 0;
         let skipped = 0;
+        let errors = 0;
 
         for (const log of logs) {
-            const result = await this.create(log);
-            if (result) {
-                inserted++;
-            } else {
-                skipped++;
+            try {
+                const result = await this.create(log);
+                if (result) {
+                    inserted++;
+                } else {
+                    skipped++;
+                }
+            } catch (err) {
+                // Пропускаем записи с ошибками (невалидный zone_id, и т.д.)
+                console.warn(`[ScannerLogsDAL] Ошибка вставки лога: ${(err as Error).message}`, {
+                    userCode: log.userCode,
+                    zoneId: log.zoneId,
+                });
+                errors++;
             }
         }
 
-        return { inserted, skipped };
+        return { inserted, skipped, errors };
     }
 
     /**

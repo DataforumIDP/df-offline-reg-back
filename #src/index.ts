@@ -12,8 +12,8 @@ import { scannerRouter } from "./routes/scannerRouter";
 
 const app = express();
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(fileUpload({
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
     abortOnLimit: true,
