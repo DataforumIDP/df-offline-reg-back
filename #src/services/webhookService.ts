@@ -5,6 +5,7 @@ import { participantLogsDAL } from "../dal/participantLogsDAL";
 import { ProjectFieldsDAL } from "../dal/projectFieldsDAL";
 import { WebhookHelper } from "../models/webhooks";
 import { ParticipantHelper } from "../models/participants";
+import { ProjectFieldHelper } from "../models/projectFields";
 import { dbError } from "../utils/errors";
 import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
@@ -190,7 +191,11 @@ export class WebhookService {
                     break;
 
                 case "img":
+                    validatedData[field.key] = String(value);
+                    break;
+
                 case "code":
+                    // Если значение передано - используем его
                     validatedData[field.key] = String(value);
                     break;
 
@@ -205,6 +210,25 @@ export class WebhookService {
                 );
                 if (!isUnique) {
                     errors[field.key] = `${field.label}: значение "${validatedData[field.key]}" уже используется`;
+                }
+            }
+        }
+
+        // Подставляем значения по умолчанию и генерируем случайные коды
+        for (const field of fields) {
+            const config = field.config as any;
+
+            // Генерируем случайные значения для полей типа code с random: true
+            if (config.type === 'code' && config.random === true) {
+                if (validatedData[field.key] === undefined || validatedData[field.key] === '') {
+                    validatedData[field.key] = ProjectFieldHelper.generateRandomValue();
+                }
+            }
+
+            // Подставляем значения по умолчанию
+            if (config.defaultValue !== undefined) {
+                if (validatedData[field.key] === undefined || validatedData[field.key] === '') {
+                    validatedData[field.key] = config.defaultValue;
                 }
             }
         }
