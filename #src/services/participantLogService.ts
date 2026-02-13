@@ -122,6 +122,54 @@ class ParticipantLogService {
             message: `Удалено ${deleted} записей логов сканеров`,
         });
     }
+
+    /**
+     * GET /projects/:projectId/operator/:userId
+     * Получить статистику оператора - список участников и действия с ними
+     */
+    async getOperatorStats(req: Request, res: Response) {
+        const projectId = Number(req.params.projectId);
+        const userId = Number(req.params.userId);
+
+        if (isNaN(projectId) || isNaN(userId)) {
+            return res.status(400).json({ error: "Invalid project ID or user ID" });
+        }
+
+        const dateStart = req.query.dateStart as string | undefined;
+        const dateEnd = req.query.dateEnd as string | undefined;
+
+        const [stats, err] = await wrap(
+            participantLogsDAL.getOperatorStats(projectId, userId, dateStart, dateEnd), !!1
+        );
+
+        if (err || !stats) {
+            return dbError(res, "#GETOPERATORSTATS1");
+        }
+
+        res.json(stats);
+    }
+
+    /**
+     * GET /projects/:projectId/participants/:participantId/printCount
+     * Получить количество печатей участника
+     */
+    async getParticipantPrintCount(req: Request, res: Response) {
+        const participantId = Number(req.params.participantId);
+
+        if (isNaN(participantId)) {
+            return res.status(400).json({ error: "Invalid participant ID" });
+        }
+
+        const [printCount, err] = await wrap(
+            participantLogsDAL.getPrintCountByParticipantId(participantId)
+        );
+
+        if (err) {
+            return dbError(res, "#GETPARTICIPANTPRINTCOUNT1");
+        }
+
+        res.json({ printCount });
+    }
 }
 
 export const participantLogService = new ParticipantLogService();

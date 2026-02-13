@@ -105,4 +105,13 @@ export class AccountsDAL extends BaseDAL {
 
         return [data, { total }];
     }
+
+    /**
+     * Получить одного пользователя по ID
+     */
+    async getById(id: number) {
+        return this.db(this.tableName)
+            .where({ id, is_delete: false })
+            .first();
+    }
 }

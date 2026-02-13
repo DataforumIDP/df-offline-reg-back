@@ -306,12 +306,146 @@ class ScanExportService {
     }
 
     /**
-     * Вычисление сессий для пользователя
-     * @param logs - логи сканирований пользователя (отсортированы по времени)
+     * Вычисление сессий для пользователя с общим таймлайном
+     * Если пользователь пикнулся в другой зоне - завершает предыдущую сессию
+     * @param logs - логи сканирований пользователя (все зоны)
      * @param zoneMap - карта зон
      * @param useDirections - использовать направления (in/out) или нечёт/чёт
      */
     private calculateSessions(
+        logs: ScannerLog[],
+        zoneMap: Map<number, Zone>,
+        useDirections: boolean
+    ): UserSession[] {
+        // Сортируем ВСЕ логи по времени (общий таймлайн)
+        const sortedLogs = [...logs].sort(
+            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+
+        const sessions: UserSession[] = [];
+        
+        // Текущая открытая сессия
+        let currentSession: {
+            zoneId: number;
+            zoneName: string;
+            start: Date;
+            lastActivity: Date;
+        } | null = null;
+
+        for (const log of sortedLogs) {
+            const logTime = new Date(log.timestamp);
+            const zone = zoneMap.get(log.zone_id);
+            const zoneName = zone?.name || `Зона ${log.zone_id}`;
+
+            if (useDirections) {
+                // Режим с направлениями in/out
+                if (log.direction === 'in') {
+                    // Вход в зону - закрываем предыдущую сессию если есть
+                    if (currentSession) {
+                        const duration = Math.round(
+                            (logTime.getTime() - currentSession.start.getTime()) / 60000
+                        );
+                        sessions.push({
+                            zoneId: currentSession.zoneId,
+                            zoneName: currentSession.zoneName,
+                            start: currentSession.start,
+                            end: logTime,
+                            durationMinutes: duration > 0 ? duration : 0,
+                        });
+                    }
+                    // Начинаем новую сессию
+                    currentSession = {
+                        zoneId: log.zone_id,
+                        zoneName,
+                        start: logTime,
+                        lastActivity: logTime,
+                    };
+                } else if (log.direction === 'out') {
+                    // Выход из зоны
+                    if (currentSession && currentSession.zoneId === log.zone_id) {
+                        // Выход из текущей зоны - закрываем сессию
+                        const duration = Math.round(
+                            (logTime.getTime() - currentSession.start.getTime()) / 60000
+                        );
+                        sessions.push({
+                            zoneId: currentSession.zoneId,
+                            zoneName: currentSession.zoneName,
+                            start: currentSession.start,
+                            end: logTime,
+                            durationMinutes: duration > 0 ? duration : 0,
+                        });
+                        currentSession = null;
+                    } else if (!currentSession) {
+                        // Выход без входа - 45 минут до выхода
+                        const startTime = new Date(logTime.getTime() - DEFAULT_SESSION_MINUTES * 60000);
+                        sessions.push({
+                            zoneId: log.zone_id,
+                            zoneName,
+                            start: startTime,
+                            end: logTime,
+                            durationMinutes: DEFAULT_SESSION_MINUTES,
+                        });
+                    }
+                    // Если выход из другой зоны - игнорируем
+                }
+            } else {
+                // Режим без направлений - любой скан считается активностью
+                // Если скан в другой зоне - закрываем предыдущую сессию
+                if (currentSession && currentSession.zoneId !== log.zone_id) {
+                    const duration = Math.round(
+                        (logTime.getTime() - currentSession.start.getTime()) / 60000
+                    );
+                    sessions.push({
+                        zoneId: currentSession.zoneId,
+                        zoneName: currentSession.zoneName,
+                        start: currentSession.start,
+                        end: logTime,
+                        durationMinutes: duration > 0 ? duration : 0,
+                    });
+                    // Начинаем новую сессию в новой зоне
+                    currentSession = {
+                        zoneId: log.zone_id,
+                        zoneName,
+                        start: logTime,
+                        lastActivity: logTime,
+                    };
+                } else if (!currentSession) {
+                    // Первый скан - начинаем сессию
+                    currentSession = {
+                        zoneId: log.zone_id,
+                        zoneName,
+                        start: logTime,
+                        lastActivity: logTime,
+                    };
+                } else {
+                    // Скан в той же зоне - обновляем lastActivity
+                    currentSession.lastActivity = logTime;
+                }
+            }
+        }
+
+        // Закрываем последнюю открытую сессию (45 минут от начала)
+        if (currentSession) {
+            const endTime = new Date(currentSession.start.getTime() + DEFAULT_SESSION_MINUTES * 60000);
+            sessions.push({
+                zoneId: currentSession.zoneId,
+                zoneName: currentSession.zoneName,
+                start: currentSession.start,
+                end: endTime,
+                durationMinutes: DEFAULT_SESSION_MINUTES,
+            });
+        }
+
+        // Сортируем по времени начала
+        sessions.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+        return sessions;
+    }
+
+    /**
+     * Старая логика - сессии по зонам независимо (не используется)
+     */
+    private calculateSessionsOld(
         logs: ScannerLog[],
         zoneMap: Map<number, Zone>,
         useDirections: boolean

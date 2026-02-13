@@ -327,6 +327,119 @@ export class ParticipantLogsDAL extends BaseDAL {
             .del();
         return result;
     }
+
+    /**
+     * Получить статистику оператора по участникам
+     * Возвращает список участников с которыми взаимодействовал оператор
+     * и детализацию действий (создал, изменил, количество печатей)
+     */
+    async getOperatorStats(
+        projectId: number,
+        userId: number,
+        dateStart?: string,
+        dateEnd?: string
+    ): Promise<{
+        participants: {
+            participantId: number;
+            currentData: Record<string, any>;
+            created: boolean;
+            updated: boolean;
+            printCount: number;
+        }[];
+        totalParticipants: number;
+    }> {
+        // Базовый запрос - логи данного оператора в проекте
+        let baseQuery = this.db<ParticipantLog>(this.tableName)
+            .where({ project_id: projectId, user_id: userId })
+            .whereNotNull('participant_id');
+
+        // Фильтр по датам
+        if (dateStart) {
+            baseQuery = baseQuery.where(`${this.tableName}.created_at`, ">=", new Date(dateStart));
+        }
+        if (dateEnd) {
+            const endDate = new Date(dateEnd);
+            endDate.setHours(23, 59, 59, 999);
+            baseQuery = baseQuery.where(`${this.tableName}.created_at`, "<=", endDate);
+        }
+
+        // Агрегируем данные по participant_id
+        const aggregated = await baseQuery
+            .clone()
+            .select('participant_id')
+            .select(this.db.raw(`
+                bool_or(action = 'CREATE') as created,
+                bool_or(action = 'UPDATE') as updated,
+                SUM(CASE WHEN action = 'PRINT' THEN 1 ELSE 0 END)::int as print_count
+            `))
+            .groupBy('participant_id');
+
+        // Получаем current_data из последней записи каждого участника
+        const participantIds = aggregated.map((r: any) => r.participant_id);
+        
+        // Подзапрос для получения последней current_data по каждому participant_id
+        const latestData = participantIds.length > 0 
+            ? await this.db.raw(`
+                SELECT DISTINCT ON (participant_id) 
+                    participant_id, 
+                    current_data
+                FROM participant_logs
+                WHERE project_id = ? 
+                    AND user_id = ? 
+                    AND participant_id = ANY(?)
+                    AND current_data IS NOT NULL
+                ORDER BY participant_id, created_at DESC
+            `, [projectId, userId, participantIds])
+            : { rows: [] };
+
+        // Создаём map для быстрого доступа
+        const dataMap = new Map<number, Record<string, any>>();
+        for (const row of latestData.rows) {
+            dataMap.set(row.participant_id, row.current_data);
+        }
+
+        const result = aggregated.map((row: any) => ({
+            ...row,
+            current_data: dataMap.get(row.participant_id) || {}
+        }));
+
+        const participants = result.map((row: any) => ({
+            participantId: row.participant_id,
+            currentData: row.current_data,
+            created: row.created || false,
+            updated: row.updated || false,
+            printCount: Number(row.print_count) || 0,
+        }));
+
+        return {
+            participants,
+            totalParticipants: participants.length,
+        };
+    }
+
+    /**
+     * Получить количество печатей по user_id
+     */
+    async getPrintCountByUserId(userId: number): Promise<number> {
+        const result = await this.db<ParticipantLog>(this.tableName)
+            .where({ user_id: userId, action: 'PRINT' })
+            .count('id as count')
+            .first();
+
+        return Number((result as any)?.count || 0);
+    }
+
+    /**
+     * Получить количество печатей по participant_id
+     */
+    async getPrintCountByParticipantId(participantId: number): Promise<number> {
+        const result = await this.db<ParticipantLog>(this.tableName)
+            .where({ participant_id: participantId, action: 'PRINT' })
+            .count('id as count')
+            .first();
+
+        return Number((result as any)?.count || 0);
+    }
 }
 
 export const participantLogsDAL = new ParticipantLogsDAL();

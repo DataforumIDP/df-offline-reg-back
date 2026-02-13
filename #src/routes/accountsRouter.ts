@@ -27,5 +27,6 @@ accountsRouter.post("/auth/refresh", refreshMiddlewares, account.refreshToken);
 
 accountsRouter.get("/self", authenticateJWT(true), account.self);
 accountsRouter.get("/", [authenticateJWT(true)], account.get);
+accountsRouter.get("/:id", [authenticateJWT(true)], account.getOne);
 accountsRouter.patch("/:id", updateMiddlewares, account.update);
 accountsRouter.delete("/", deleteMiddlewares, account.delete);

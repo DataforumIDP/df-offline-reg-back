@@ -11,17 +11,24 @@ export interface Account {
     is_delete: boolean;
     created_at: Date;
     updated_at: Date;
+    // Дополнительное поле (не хранится в БД)
+    printCount?: number;
 }
 
 export class AccountHelper {
     static toJSON(account: Account) {
-        return {
+        const json: Record<string, any> = {
             id: account.id,
             name: account.name,
             login: account.login,
             role: account.role,
             projectId: account.projectId,
         };
+        // Добавляем printCount если он есть
+        if (account.printCount !== undefined) {
+            json.printCount = account.printCount;
+        }
+        return json;
     }
 
     static isAdmin(account: Account): boolean {

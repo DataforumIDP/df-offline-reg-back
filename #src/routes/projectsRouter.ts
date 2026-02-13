@@ -75,6 +75,7 @@ projectsRouter.get("/:projectId/code/:code", findByCodeMiddlewares, participantC
 // ===== Роуты логов участников (должны быть ДО роутов с :participantId) =====
 projectsRouter.get("/:projectId/participants/log/stats", getLogsMiddlewares, participantLogService.getStats);
 projectsRouter.get("/:projectId/participants/log", getLogsMiddlewares, participantLogService.getAll);
+projectsRouter.get("/:projectId/operator/:userId", getLogsMiddlewares, participantLogService.getOperatorStats);
 
 // ===== Excel и массовые операции (должны быть ДО роутов с :participantId) =====
 projectsRouter.get("/:projectId/participants/excel", excelTemplateMiddlewares, participant.getExcelTemplate);
@@ -93,6 +94,7 @@ projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExpor
 projectsRouter.get("/:projectId/participants", getParticipantsMiddlewares, participant.getAll);
 projectsRouter.get("/:projectId/participants/:participantId", getParticipantMiddlewares, participant.getOne);
 projectsRouter.get("/:projectId/participants/:participantId/log", getParticipantMiddlewares, participantLogService.getByParticipant);
+projectsRouter.get("/:projectId/participants/:participantId/printCount", getParticipantMiddlewares, participantLogService.getParticipantPrintCount);
 projectsRouter.post("/:projectId/participants", createParticipantMiddlewares, participant.create);
 projectsRouter.post("/:projectId/participants/:participantId/print", printParticipantMiddlewares, participant.print);
 projectsRouter.put("/:projectId/participants/:participantId", updateParticipantMiddlewares, participant.update);

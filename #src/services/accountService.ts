@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { ReqWithBody, ReqWithParams, ReqWithQuery } from "../baseTypes";
 import { AccountsDAL as aDAL } from "../dal/accountsDAL";
 import { ProjectsDAL as pDAL } from "../dal/projectsDAL";
+import { participantLogsDAL } from "../dal/participantLogsDAL";
 import { authError, dbError } from "../utils/errors";
 import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
@@ -224,5 +225,31 @@ export class AccountService {
             refreshToken,
             account: payload,
         });
+    }
+
+    /**
+     * GET /accounts/:id
+     * Получить одного пользователя с количеством печатей
+     */
+    async getOne(
+        req: ReqWithParams<{ id: string }>,
+        res: Response
+    ) {
+        const id = parseInt(req.params.id, 10);
+
+        if (isNaN(id)) {
+            return res.status(400).json({ error: "Invalid user ID" });
+        }
+
+        const [account] = await wrap(AccountDAL.getById(id));
+        if (!account) {
+            return res.status(404).json({ error: "Пользователь не найден" });
+        }
+
+        // Получаем количество печатей
+        const [printCount] = await wrap(participantLogsDAL.getPrintCountByUserId(id));
+        account.printCount = printCount || 0;
+
+        res.json(AccountHelper.toJSON(account));
     }
 }
