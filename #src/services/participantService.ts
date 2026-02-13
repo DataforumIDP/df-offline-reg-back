@@ -448,6 +448,7 @@ export class ParticipantService {
      */
     async exportToExcel(req: Request, res: Response) {
         const projectId = Number(req.params.projectId);
+        const includePrints = req.query.includePrints === 'true';
 
         // Получаем схему проекта
         const [fields] = await wrap(fieldDAL.getByProjectId(projectId));
@@ -459,6 +460,15 @@ export class ParticipantService {
         const [participants] = await wrap(participantDAL.getAllByProjectId(projectId, req.query as any));
         if (!participants) {
             return dbError(res, "#EXPORTEXCEL2");
+        }
+
+        // Получаем количество печатей если нужно
+        let printCounts: Map<number, number> | null = null;
+        if (includePrints) {
+            const [counts] = await wrap(participantLogsDAL.getPrintCountsByParticipant(projectId));
+            if (counts) {
+                printCounts = counts;
+            }
         }
 
         const workbook = new Excel.Workbook();
@@ -473,11 +483,12 @@ export class ParticipantService {
                 width: 20,
             })),
             { header: "Дата создания", key: "_created_at", width: 20 },
+            ...(includePrints ? [{ header: "Печатей", key: "_print_count", width: 10 }] : []),
         ];
         worksheet.columns = columns;
 
-        // Добавляем строки
-        for (const p of participants) {
+        // Подготавливаем строки с печатями
+        let rowsData = participants.map((p: any) => {
             const row: Record<string, any> = {
                 _id: p.id,
                 _created_at: p.created_at,
@@ -493,7 +504,21 @@ export class ParticipantService {
                 
                 row[field.key] = value;
             }
+
+            if (includePrints && printCounts) {
+                row._print_count = printCounts.get(p.id) || 0;
+            }
             
+            return row;
+        });
+
+        // Сортируем по количеству печатей если включено
+        if (includePrints) {
+            rowsData.sort((a: any, b: any) => (b._print_count || 0) - (a._print_count || 0));
+        }
+
+        // Добавляем строки
+        for (const row of rowsData) {
             worksheet.addRow(row);
         }
 

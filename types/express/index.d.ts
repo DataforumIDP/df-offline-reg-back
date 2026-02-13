@@ -10,6 +10,7 @@ declare global {
             project?: Project;
             projectField?: ProjectField;
             participant?: Participant;
+            operatorProject?: Project; // Проект оператора (для middleware проверки срока)
             appValues?: {
                 project?: Project;
                 [key: string]: any;

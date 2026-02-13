@@ -56,7 +56,7 @@ const dataValidation = body()
 /**
  * Проверка доступа к участникам проекта
  * - Админ имеет доступ к любому проекту
- * - Оператор только к своему проекту
+ * - Оператор только к своему проекту + проверка срока мероприятия
  */
 const checkProjectAccess = (allowOperator: boolean = true) => {
     return async (req: Request, res: Response, next: NextFunction) => {
@@ -86,6 +86,17 @@ const checkProjectAccess = (allowOperator: boolean = true) => {
             if (account.projectId !== projectId) {
                 return authError(res, "Нет доступа к этому проекту");
             }
+
+            // Проверяем, не истёк ли срок мероприятия
+            const now = new Date();
+            const endDate = new Date(project.dateEnd);
+            if (endDate < now) {
+                return res.status(403).json({
+                    error: "Мероприятие завершено",
+                    code: "PROJECT_EXPIRED",
+                });
+            }
+
             req.project = project;
             req.appValues = { ...req.appValues, project };
             return next();

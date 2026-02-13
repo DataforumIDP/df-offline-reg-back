@@ -304,15 +304,15 @@ export class ScannerLogsDAL {
     }
 
     /**
-     * Статистика по зоне
+     * Статистика по зоне - уникальные пользователи
      */
     async getZoneStats(zoneId: number): Promise<{ in: number; out: number; total: number }> {
         const result = await db(this.table)
             .where({ zone_id: zoneId })
             .select(
-                db.raw("COUNT(*) FILTER (WHERE direction = 'in') as in_count"),
-                db.raw("COUNT(*) FILTER (WHERE direction = 'out') as out_count"),
-                db.raw("COUNT(*) as total")
+                db.raw("COUNT(DISTINCT CASE WHEN direction = 'in' THEN user_code END) as in_count"),
+                db.raw("COUNT(DISTINCT CASE WHEN direction = 'out' THEN user_code END) as out_count"),
+                db.raw("COUNT(DISTINCT user_code) as total")
             )
             .first();
 
@@ -321,6 +321,33 @@ export class ScannerLogsDAL {
             out: parseInt(result?.out_count || '0', 10),
             total: parseInt(result?.total || '0', 10),
         };
+    }
+
+    /**
+     * Получить общее число уникальных пользователей по зоне с фильтрацией по дате
+     */
+    async getUniqueUserCountByZone(
+        zoneId: number,
+        dateStart?: string,
+        dateEnd?: string
+    ): Promise<number> {
+        let query = db(this.table)
+            .where({ zone_id: zoneId });
+
+        if (dateStart) {
+            query = query.where('timestamp', '>=', new Date(dateStart));
+        }
+        if (dateEnd) {
+            const endDate = new Date(dateEnd);
+            endDate.setHours(23, 59, 59, 999);
+            query = query.where('timestamp', '<=', endDate);
+        }
+
+        const result = await query
+            .countDistinct('user_code as count')
+            .first();
+
+        return parseInt((result as any)?.count || '0', 10);
     }
 
     /**

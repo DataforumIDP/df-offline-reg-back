@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { zonesDAL } from "../dal/zonesDAL";
 import { ZoneHelper, ZoneRuleHelper } from "../models/zones";
 import { ScannerConfig, ScannerHelper } from "../models/scanners";
-import { projectAuthDAL, scannersDAL } from "../dal/scannersDAL";
+import { projectAuthDAL, scannersDAL, scannerLogsDAL } from "../dal/scannersDAL";
 import { ProjectsDAL } from "../dal/projectsDAL";
 import { dbError } from "../utils/errors";
 import { wrap } from "../utils/wrap";
@@ -227,6 +227,26 @@ class ZoneService {
                 isCurrentZone: s.zone_id === zone.id,
             }))
         );
+    }
+
+    /**
+     * GET /zones/:zoneId/participants-count
+     * Получение количества уникальных участников зоны
+     */
+    async getParticipantsCount(req: Request, res: Response) {
+        const zone = req.zone!;
+        const dateStart = req.query.dateStart as string | undefined;
+        const dateEnd = req.query.dateEnd as string | undefined;
+
+        const [count, err] = await wrap(
+            scannerLogsDAL.getUniqueUserCountByZone(zone.id, dateStart, dateEnd)
+        );
+
+        if (err) {
+            return dbError(res, "#GETPARTICIPANTSCOUNT1");
+        }
+
+        res.json({ count: count || 0 });
     }
 }
 

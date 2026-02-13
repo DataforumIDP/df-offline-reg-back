@@ -114,4 +114,13 @@ export class AccountsDAL extends BaseDAL {
             .where({ id, is_delete: false })
             .first();
     }
+
+    /**
+     * Найти оператора по имени и проекту
+     */
+    async findOperatorByNameAndProject(name: string, projectId: number) {
+        return this.db(this.tableName)
+            .where({ name, projectId, role: 'operator', is_delete: false })
+            .first();
+    }
 }

@@ -104,6 +104,21 @@ export class AccountService {
                 });
             }
 
+            // Для операторов проверяем, не истёк ли срок мероприятия
+            if (account.role === 'operator' && account.projectId) {
+                const [project] = await wrap(ProjectDAL.findByPk(account.projectId));
+                if (project) {
+                    const now = new Date();
+                    const endDate = new Date(project.dateEnd);
+                    if (endDate < now) {
+                        return res.status(403).json({
+                            error: "Мероприятие завершено",
+                            code: "PROJECT_EXPIRED",
+                        });
+                    }
+                }
+            }
+
             // Генерируем новый access токен
             const payload = AccountHelper.toJSON(account);
             const newAccessToken = JWT.createAccessToken(payload);
@@ -192,6 +207,33 @@ export class AccountService {
         if (!project) {
             return res.status(404).json({
                 error: "Проект не найден",
+            });
+        }
+
+        // Проверяем, не истёк ли срок мероприятия
+        const now = new Date();
+        const endDate = new Date(project.dateEnd);
+        if (endDate < now) {
+            return res.status(403).json({
+                error: "Мероприятие завершено",
+                code: "PROJECT_EXPIRED",
+            });
+        }
+
+        // Проверяем, есть ли уже оператор с таким именем в этом проекте
+        const [existingAccount] = await wrap(AccountDAL.findOperatorByNameAndProject(name, project.id));
+        
+        if (existingAccount) {
+            // Возвращаем данные для авторизации существующего пользователя
+            const payload = AccountHelper.toJSON(existingAccount);
+            const accessToken = JWT.createAccessToken(payload);
+            const refreshToken = JWT.createRefreshToken(payload);
+
+            return res.status(200).json({
+                message: "Авторизация выполнена успешно",
+                accessToken,
+                refreshToken,
+                account: payload,
             });
         }
 

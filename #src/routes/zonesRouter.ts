@@ -120,4 +120,17 @@ router.get(
     zoneService.getScanners
 )
 
+/**
+ * GET /zones/:zoneId/participants-count
+ * Получение количества уникальных участников зоны
+ * Query params: dateStart, dateEnd
+ */
+router.get(
+    '/:zoneId/participants-count',
+    authenticateJWT(),
+    roleCheck(adminRoles),
+    zoneExistsMiddleware,
+    zoneService.getParticipantsCount
+)
+
 export const zonesRouter = router
