@@ -32,6 +32,7 @@ export interface ProjectField {
     label: string;
     key: string;
     config: ProjectFieldConfig;
+    scanner_editable: boolean; // Можно редактировать через сканер (только для checkbox)
     is_delete: boolean;
     created_at: Date;
     updated_at: Date;
@@ -46,7 +47,7 @@ export class ProjectFieldHelper {
             label: field.label,
             key: field.key,
             config: field.config,
-
+            scannerEditable: field.scanner_editable ?? false,
         };
     }
 

@@ -31,6 +31,7 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
         "dateStart",
         "dateEnd",
         "isOperatorEditable",
+        "colorRow",
         "rulesField",
         "scanMode",
     ]);

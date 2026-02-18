@@ -1,4 +1,5 @@
 import express from "express";
+import { createServer } from "http";
 import fileUpload from "express-fileupload";
 import { db } from "./config/db";
 import cors from "cors";
@@ -9,6 +10,9 @@ import { printTemplatesRouter } from "./routes/printTemplatesRouter";
 import webhooksRouter from "./routes/webhooksRouter";
 import { zonesRouter } from "./routes/zonesRouter";
 import { scannerRouter } from "./routes/scannerRouter";
+import { sessionsRouter } from "./routes/sessionsRouter";
+import { qrAuthRouter } from "./routes/qrAuthRouter";
+import { initQrAuthSocket } from "./services/qrAuthService";
 
 const app = express();
 
@@ -31,6 +35,8 @@ app.use("/print-templates", printTemplatesRouter);
 app.use("/webhooks", webhooksRouter);
 app.use("/zones", zonesRouter);
 app.use("/scanner", scannerRouter);
+app.use("/sessions", sessionsRouter);
+app.use("/qr-auth", qrAuthRouter);
 
 app.use(_404Middleware);
 
@@ -57,7 +63,12 @@ async function postgresTasks() {
 }
 
 async function expressTasks() {
-    return new Promise(resolve=> app.listen(PORT, () => resolve(true)))
+    const server = createServer(app);
+    
+    // Инициализация Socket.IO для QR авторизации
+    initQrAuthSocket(server);
+    
+    return new Promise(resolve => server.listen(PORT, () => resolve(true)));
 }
 
 async function start () {

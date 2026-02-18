@@ -201,6 +201,26 @@ export class ParticipantsDAL extends BaseDAL {
 
         const participants = await recordsQuery;
 
+        // Добавляем print_count для каждого участника одним запросом
+        if (participants.length > 0) {
+            const participantIds = participants.map(p => p.id);
+            const printCounts = await this.db('participant_logs')
+                .select('participant_id')
+                .count('* as print_count')
+                .whereIn('participant_id', participantIds)
+                .where('action', 'PRINT')
+                .groupBy('participant_id');
+
+            const printCountMap = new Map<number, number>();
+            printCounts.forEach((row: any) => {
+                printCountMap.set(row.participant_id, Number(row.print_count));
+            });
+
+            participants.forEach((p: any) => {
+                p.print_count = printCountMap.get(p.id) || 0;
+            });
+        }
+
         return [participants, { total }];
     }
 

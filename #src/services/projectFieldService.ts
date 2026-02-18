@@ -99,7 +99,7 @@ export class ProjectFieldService {
     async updateField(req: Request, res: Response) {
         const projectId = Number(req.params.projectId)
         const fieldId = Number(req.params.fieldId)
-        const { label, key, type, config } = req.body
+        const { label, key, type, config, scannerEditable } = req.body
 
         // Получаем текущее поле
         const [existing, getErr] = await wrap(fieldDAL.getById(fieldId))
@@ -142,7 +142,7 @@ export class ProjectFieldService {
                 // Обновляем поле
                 const updated = await fieldDAL.updateFieldFull(
                     fieldId,
-                    { label, key, type, config },
+                    { label, key, type, config, scannerEditable },
                     trx
                 )
 

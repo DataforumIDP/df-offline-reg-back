@@ -22,7 +22,7 @@ accountsRouter.post("/reg", registerMiddlewares, account.register);
 //     account.authbr(allRoles)
 // );
 
-accountsRouter.post("/auth/admin", authMiddlewares, account.authbr(adminRoles));
+accountsRouter.post("/auth/admin", authMiddlewares, account.authbr(adminRoles, true));
 accountsRouter.post("/auth/refresh", refreshMiddlewares, account.refreshToken);
 
 accountsRouter.get("/self", authenticateJWT(true), account.self);

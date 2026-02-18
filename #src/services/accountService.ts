@@ -3,6 +3,7 @@ import { ReqWithBody, ReqWithParams, ReqWithQuery } from "../baseTypes";
 import { AccountsDAL as aDAL } from "../dal/accountsDAL";
 import { ProjectsDAL as pDAL } from "../dal/projectsDAL";
 import { participantLogsDAL } from "../dal/participantLogsDAL";
+import { sessionsDAL } from "../dal/sessionsDAL";
 import { authError, dbError } from "../utils/errors";
 import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
@@ -11,6 +12,7 @@ import { _offset } from "../utils/getOffset";
 import { paginationResponse } from "../utils/paginationUtils";
 import { filteredObjectByKeys } from "../utils/filteredObjectByKeys";
 import { AccountHelper } from "../models/accounts";
+import { SessionHelper } from "../models/sessions";
 import { generateRandomString } from "../utils/generateRandomString";
 
 const AccountDAL = new aDAL();
@@ -38,7 +40,7 @@ export class AccountService {
     /**
      *  Authorize by roles
      */
-    authbr(roles: string[]) {
+    authbr(roles: string[], createSession: boolean = false) {
         return async (
             req: ReqWithBody<{ login: string; password: string }>,
             res: Response
@@ -62,6 +64,26 @@ export class AccountService {
 
             const accessToken = JWT.createAccessToken(payload);
             const refreshToken = JWT.createRefreshToken(payload);
+
+            // Создаем сессию для админов
+            if (createSession) {
+                const tokenHash = SessionHelper.hashToken(refreshToken);
+                const ipAddress = SessionHelper.getIpAddress(req as Request);
+                const userAgent = req.headers["user-agent"] || "";
+                const deviceName = SessionHelper.parseDeviceName(userAgent);
+
+                // 60 дней (как у refresh token)
+                const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+
+                await sessionsDAL.create({
+                    account_id: account.id,
+                    token_hash: tokenHash,
+                    ip_address: ipAddress,
+                    user_agent: userAgent,
+                    device_name: deviceName,
+                    expires_at: expiresAt,
+                });
+            }
 
             res.json({
                 message: "Вход выполнен успешно",
@@ -102,6 +124,22 @@ export class AccountService {
                 return res.status(401).json({
                     error: "Пользователь не найден"
                 });
+            }
+
+            // Для админов проверяем активность сессии
+            if (account.role === 'admin' || account.role === 'superadmin') {
+                const tokenHash = SessionHelper.hashToken(refreshToken);
+                const [session] = await wrap(sessionsDAL.findByTokenHash(tokenHash));
+                
+                if (!session || !session.is_active) {
+                    return res.status(401).json({
+                        error: "Сессия завершена",
+                        code: "SESSION_TERMINATED",
+                    });
+                }
+
+                // Обновляем last_activity
+                await sessionsDAL.updateLastActivity(session.id);
             }
 
             // Для операторов проверяем, не истёк ли срок мероприятия

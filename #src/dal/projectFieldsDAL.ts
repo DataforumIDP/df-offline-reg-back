@@ -77,19 +77,21 @@ export class ProjectFieldsDAL extends BaseDAL {
         return result || null;
     }
 
-    // Обновить поле полностью (label, key, type, config)
+    // Обновить поле полностью (label, key, type, config, scannerEditable)
     // При необходимости вызывается внутри транзакции: передавайте trx как опцию
     async updateFieldFull(id: number, data: {
         label?: string;
         key?: string;
         type?: string;
         config?: ProjectFieldConfig;
+        scannerEditable?: boolean;
     }, trx?: any): Promise<ProjectField | null> {
         const qb = trx ? trx(this.tableName) : this.db(this.tableName);
         const params: any = {};
 
         if (data.label !== undefined) params.label = data.label;
         if (data.key !== undefined) params.key = data.key;
+        if (data.scannerEditable !== undefined) params.scanner_editable = data.scannerEditable;
         if (data.type !== undefined) {
             // Если передан type вместе с config, используем config; иначе добавим type в существующий config
             if (data.config !== undefined) {
