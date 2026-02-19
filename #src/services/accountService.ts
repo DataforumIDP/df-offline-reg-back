@@ -61,9 +61,8 @@ export class AccountService {
                 return authError(res, "Некорректный логин или пароль!");
 
             const payload = AccountHelper.toJSON(account);
-
-            const accessToken = JWT.createAccessToken(payload);
-            const refreshToken = JWT.createRefreshToken(payload);
+            let accessToken = JWT.createAccessToken(payload);
+            let refreshToken = JWT.createRefreshToken(payload);
 
             // Создаем сессию для админов
             if (createSession) {
@@ -75,13 +74,17 @@ export class AccountService {
                 // 60 дней (как у refresh token)
                 const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
 
-                await sessionsDAL.create({
+                const session = await sessionsDAL.create({
                     account_id: account.id,
                     token_hash: tokenHash,
                     ip_address: ipAddress,
                     user_agent: userAgent,
                     device_name: deviceName,
                     expires_at: expiresAt,
+                });
+
+                accessToken = JWT.createAccessToken(payload, {
+                    sessionId: session.id,
                 });
             }
 
@@ -140,6 +143,17 @@ export class AccountService {
 
                 // Обновляем last_activity
                 await sessionsDAL.updateLastActivity(session.id);
+
+                const payload = AccountHelper.toJSON(account);
+                const newAccessToken = JWT.createAccessToken(payload, {
+                    sessionId: session.id,
+                });
+
+                return res.status(200).json({
+                    message: "Токен обновлен успешно",
+                    accessToken: newAccessToken,
+                    account: payload,
+                });
             }
 
             // Для операторов проверяем, не истёк ли срок мероприятия

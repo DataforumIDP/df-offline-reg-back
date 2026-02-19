@@ -121,9 +121,8 @@ export async function confirmQrAuth(
         return { success: false, error: "Аккаунт не найден" };
     }
 
-    // Генерируем токены
+    // Генерируем refresh токен
     const payload = AccountHelper.toJSON(account);
-    const accessToken = JWT.createAccessToken(payload);
     const refreshToken = JWT.createRefreshToken(payload);
 
     // Создаем сессию
@@ -131,13 +130,17 @@ export async function confirmQrAuth(
     const deviceName = SessionHelper.parseDeviceName(pending.userAgent);
     const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
 
-    await sessionsDAL.create({
+    const session = await sessionsDAL.create({
         account_id: account.id,
         token_hash: tokenHash,
         ip_address: pending.ipAddress,
         user_agent: pending.userAgent,
         device_name: deviceName,
         expires_at: expiresAt,
+    });
+
+    const accessToken = JWT.createAccessToken(payload, {
+        sessionId: session.id,
     });
 
     // Отправляем токены через Socket.IO

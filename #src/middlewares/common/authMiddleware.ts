@@ -5,6 +5,7 @@ import { wrap } from "../../utils/wrap";
 import {Account} from "../../models/accounts";
 import { JWT } from "../../utils/JWTutils";
 import { AccountsDAL } from "../../dal/accountsDAL";
+import { sessionsDAL } from "../../dal/sessionsDAL";
 
 /**
  * Middleware для проверки JWT авторизации.
@@ -35,7 +36,25 @@ export const authenticateJWT = (required: boolean = true) => {
         if (account === null && required)
             return authError(res, "Неверный или истёкший токен.");
 
-        if (account !== null) req.account = account;
+        if (account !== null) {
+            if (account.role === "admin" || account.role === "superadmin") {
+                const sessionId = Number((data as any).sessionId);
+
+                if (!sessionId) {
+                    return authError(res, "Сессия завершена. Войдите заново.");
+                }
+
+                const [session] = await wrap(sessionsDAL.findByPk(sessionId));
+
+                if (!session || !session.is_active || session.account_id !== account.id || new Date(session.expires_at) <= new Date()) {
+                    return authError(res, "Сессия завершена. Войдите заново.");
+                }
+
+                await sessionsDAL.updateLastActivity(session.id);
+            }
+
+            req.account = account;
+        }
 
         next();
     };

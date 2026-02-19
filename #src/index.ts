@@ -16,6 +16,9 @@ import { initQrAuthSocket } from "./services/qrAuthService";
 
 const app = express();
 
+// Доверяем proxy-заголовкам (X-Forwarded-For) от nginx
+app.set("trust proxy", true);
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(fileUpload({

@@ -8,10 +8,11 @@ export class JWT {
     static secret = (process.env.JWT_ACCESS_SECRET as string) || "12345";
     static refreshSecret = (process.env.JWT_REFRESH_SECRET as string) || "refresh_secret_12345";
 
-    static createAccessToken(payload: any) {
+    static createAccessToken(payload: any, options?: { sessionId?: number }) {
         return jwt.sign(
             { 
                 payload,
+                sessionId: options?.sessionId,
                 jti: Date.now() + Math.random() // Добавляем уникальный идентификатор токена
             },
             this.secret,
@@ -19,9 +20,12 @@ export class JWT {
         );
     }
 
-    static createRefreshToken(payload: any) {
+    static createRefreshToken(payload: any, options?: { sessionId?: number }) {
         return jwt.sign(
-            { payload },
+            {
+                payload,
+                sessionId: options?.sessionId,
+            },
             this.refreshSecret,
             { expiresIn: "60d" } // Refresh токен действителен 60 дней
         );
