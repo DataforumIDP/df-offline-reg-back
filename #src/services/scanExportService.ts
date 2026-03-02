@@ -735,11 +735,26 @@ class ScanExportService {
                 continue; // Пропускаем если нет даты, времени или зоны
             }
 
-            // Парсим дату и время
-            const [day, month, year] = item.date.split('.').map(Number);
-            const [timeStart, timeEnd] = item.time.split('-').map(s => s.trim());
-            const [startHour, startMin] = timeStart.split(':').map(Number);
-            const [endHour, endMin] = timeEnd.split(':').map(Number);
+            // Парсим дату и время с валидацией формата
+            const dateParts = item.date.split('.');
+            if (dateParts.length !== 3) {
+                continue; // Неверный формат даты
+            }
+            const [day, month, year] = dateParts.map(Number);
+
+            const timeParts = item.time.split('-');
+            if (timeParts.length !== 2) {
+                continue; // Неверный формат времени
+            }
+            const [timeStart, timeEnd] = timeParts.map(s => s.trim());
+
+            const timeStartParts = timeStart.split(':');
+            const timeEndParts = timeEnd.split(':');
+            if (timeStartParts.length < 2 || timeEndParts.length < 2) {
+                continue; // Неверный формат времени
+            }
+            const [startHour, startMin] = timeStartParts.map(Number);
+            const [endHour, endMin] = timeEndParts.map(Number);
 
             const dateStart = new Date(year, month - 1, day, startHour, startMin);
             const dateEnd = new Date(year, month - 1, day, endHour, endMin);
