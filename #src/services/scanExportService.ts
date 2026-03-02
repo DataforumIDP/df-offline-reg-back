@@ -23,6 +23,7 @@ interface ScanExportRequest {
     filter?: Record<string, any>[]; // Фильтры по полям
     timeRange?: string[];      // [startISO, endISO]
     addPrints?: boolean;       // Включать количество печатей
+    inclusive?: boolean;       // Включать участников, которые уже находились в зоне до начала периода
 }
 
 // Интерфейс для массовой выгрузки
@@ -37,6 +38,7 @@ interface MassExportRequest {
     items: MassExportItem[];
     keys?: string[];           // Ключи схемы для выборки
     addPrints?: boolean;       // Включать количество печатей
+    inclusive?: boolean;       // Включать участников, которые уже находились в зоне до начала периода
 }
 
 // Интерфейс сессии пользователя
@@ -77,7 +79,7 @@ class ScanExportService {
         }
 
         const body: ScanExportRequest = req.body || {};
-        const { keys = [], zones: zoneIds, filter, timeRange, addPrints = false } = body;
+        const { keys = [], zones: zoneIds, filter, timeRange, addPrints = false, inclusive = false } = body;
 
         // 1. Получаем зоны проекта
         const [allZones, zonesErr] = await wrap(zonesDAL.getByProjectId(projectId));
@@ -126,10 +128,16 @@ class ScanExportService {
         }
 
         // 4. Получаем логи сканеров
+        // Если inclusive=true, расширяем выборку на 24 часа назад для захвата тех, кто уже был в зоне
+        const INCLUSIVE_LOOKBACK_MS = 24 * 60 * 60 * 1000; // 24 часа
+        const queryTimeStart = inclusive && timeStart
+            ? new Date(timeStart.getTime() - INCLUSIVE_LOOKBACK_MS)
+            : timeStart;
+
         const [logs, logsErr] = await wrap(scannerLogsDAL.getLogsForExport({
             projectId,
             zoneIds: zones.map(z => z.id),
-            timeStart,
+            timeStart: queryTimeStart,
             timeEnd,
         }));
 
@@ -205,11 +213,26 @@ class ScanExportService {
             }
 
             // Вычисляем сессии
-            const sessions = this.calculateSessions(
+            let sessions = this.calculateSessions(
                 userLogs,
                 zoneMap,
                 scanMode === 'direction'
             );
+
+            // Если inclusive=true и есть timeRange, обрезаем сессии по границам
+            if (inclusive && timeStart && timeEnd) {
+                sessions = this.trimSessionsToTimeRange(
+                    sessions,
+                    timeStart,
+                    timeEnd,
+                    zoneIds && zoneIds.length > 0 ? zoneIds : undefined
+                );
+            }
+
+            // Пропускаем пользователей без сессий в указанном диапазоне
+            if (sessions.length === 0) {
+                continue;
+            }
 
             const totalMinutes = sessions.reduce((sum, s) => sum + s.durationMinutes, 0);
             const printCount = participant && addPrints
@@ -322,11 +345,42 @@ class ScanExportService {
     /**
      * Вычисление сессий для пользователя с общим таймлайном
      * Если пользователь пикнулся в другой зоне - завершает предыдущую сессию
+     * Сессии НЕ переходят через полночь - каждый день рассчитывается отдельно
      * @param logs - логи сканирований пользователя (все зоны)
      * @param zoneMap - карта зон
      * @param useDirections - использовать направления (in/out) или нечёт/чёт
      */
     private calculateSessions(
+        logs: ScannerLog[],
+        zoneMap: Map<number, Zone>,
+        useDirections: boolean
+    ): UserSession[] {
+        // Разбиваем логи по UTC дням
+        const logsByDay = new Map<string, ScannerLog[]>();
+        for (const log of logs) {
+            const dayKey = this.getDateKey(log.timestamp);
+            const dayLogs = logsByDay.get(dayKey) || [];
+            dayLogs.push(log);
+            logsByDay.set(dayKey, dayLogs);
+        }
+
+        // Рассчитываем сессии для каждого дня отдельно
+        const allSessions: UserSession[] = [];
+        for (const [, dayLogs] of logsByDay) {
+            const daySessions = this.calculateSessionsForDay(dayLogs, zoneMap, useDirections);
+            allSessions.push(...daySessions);
+        }
+
+        // Сортируем по времени начала
+        allSessions.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+        return allSessions;
+    }
+
+    /**
+     * Вычисление сессий для одного дня
+     */
+    private calculateSessionsForDay(
         logs: ScannerLog[],
         zoneMap: Map<number, Zone>,
         useDirections: boolean
@@ -454,6 +508,56 @@ class ScanExportService {
         sessions.sort((a, b) => a.start.getTime() - b.start.getTime());
 
         return sessions;
+    }
+
+    /**
+     * Обрезает сессии по временным границам и пересчитывает длительность
+     * Используется для режима inclusive - включает тех, кто уже был в зоне
+     * @param sessions - исходные сессии
+     * @param timeStart - начало периода
+     * @param timeEnd - конец периода
+     * @param zoneIds - ID зон для фильтрации (если указаны)
+     */
+    private trimSessionsToTimeRange(
+        sessions: UserSession[],
+        timeStart: Date,
+        timeEnd: Date,
+        zoneIds?: number[]
+    ): UserSession[] {
+        const trimmed: UserSession[] = [];
+
+        for (const session of sessions) {
+            // Фильтруем по зонам если указаны
+            if (zoneIds && zoneIds.length > 0 && !zoneIds.includes(session.zoneId)) {
+                continue;
+            }
+
+            const sessionStart = session.start.getTime();
+            const sessionEnd = session.end ? session.end.getTime() : sessionStart + DEFAULT_SESSION_MINUTES * 60000;
+            const rangeStart = timeStart.getTime();
+            const rangeEnd = timeEnd.getTime();
+
+            // Сессия полностью вне диапазона - пропускаем
+            if (sessionEnd <= rangeStart || sessionStart >= rangeEnd) {
+                continue;
+            }
+
+            // Обрезаем сессию по границам
+            const clippedStart = new Date(Math.max(sessionStart, rangeStart));
+            const clippedEnd = new Date(Math.min(sessionEnd, rangeEnd));
+            const durationMinutes = Math.round((clippedEnd.getTime() - clippedStart.getTime()) / 60000);
+
+            if (durationMinutes > 0) {
+                trimmed.push({
+                    ...session,
+                    start: clippedStart,
+                    end: clippedEnd,
+                    durationMinutes,
+                });
+            }
+        }
+
+        return trimmed;
     }
 
     /**
@@ -679,11 +783,14 @@ class ScanExportService {
         }
 
         const body: MassExportRequest = req.body || {};
-        const { items = [], keys = [], addPrints = false } = body;
+        const { items = [], keys = [], addPrints = false, inclusive = false } = body;
 
         if (!items || items.length === 0) {
             return errorSend(res, { message: "Список для выгрузки пуст" });
         }
+
+        // Константа для lookback при inclusive
+        const INCLUSIVE_LOOKBACK_MS = 24 * 60 * 60 * 1000; // 24 часа
 
         // 1. Получаем все зоны проекта
         const [allZones, zonesErr] = await wrap(zonesDAL.getByProjectId(projectId));
@@ -768,10 +875,15 @@ class ScanExportService {
             }
 
             // Получаем логи для этой зоны и времени
+            // Если inclusive=true, расширяем выборку на 24 часа назад
+            const queryTimeStart = inclusive
+                ? new Date(dateStart.getTime() - INCLUSIVE_LOOKBACK_MS)
+                : dateStart;
+
             const [logs, logsErr] = await wrap(scannerLogsDAL.getLogsForExport({
                 projectId,
                 zoneIds: [zone.id],
-                timeStart: dateStart,
+                timeStart: queryTimeStart,
                 timeEnd: dateEnd,
             }));
 
@@ -804,11 +916,27 @@ class ScanExportService {
 
             for (const [userCode, userLogs] of logsByUser) {
                 const participant = participantMap.get(userCode) || null;
-                const sessions = this.calculateSessions(
+                let sessions = this.calculateSessions(
                     userLogs,
                     zoneMap,
                     scanMode === 'direction'
                 );
+
+                // Если inclusive=true, обрезаем сессии по границам периода
+                if (inclusive) {
+                    sessions = this.trimSessionsToTimeRange(
+                        sessions,
+                        dateStart,
+                        dateEnd,
+                        [zone.id]
+                    );
+                }
+
+                // Пропускаем пользователей без сессий в указанном диапазоне
+                if (sessions.length === 0) {
+                    continue;
+                }
+
                 const totalMinutes = sessions.reduce((sum, s) => sum + s.durationMinutes, 0);
                 const printCount = participant && addPrints
                     ? (printCounts.get(participant.id) || 0)
