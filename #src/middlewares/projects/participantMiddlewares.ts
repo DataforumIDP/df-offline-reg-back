@@ -433,6 +433,16 @@ export const exportScansMiddlewares = [
     checkProjectAccess(false), // Только админы
 ];
 
+// ===== Массовая выгрузка сканов =====
+
+// POST /projects/:projectId/scanners/logs/mass - массовая выгрузка (только админы)
+export const exportMassScansMiddlewares = [
+    authenticateJWT(true),
+    projectIdParam,
+    inputValidationMiddleware,
+    checkProjectAccess(false), // Только админы
+];
+
 // ===== Поиск по коду =====
 
 const codeParam = param("code")

@@ -25,6 +25,20 @@ interface ScanExportRequest {
     addPrints?: boolean;       // Включать количество печатей
 }
 
+// Интерфейс для массовой выгрузки
+interface MassExportItem {
+    date: string;              // Дата в формате DD.MM.YYYY
+    time: string;              // Время в формате HH:MM-HH:MM
+    zone: string;              // Название зала/зоны
+    title: string;             // Название листа (макс 31 символ)
+}
+
+interface MassExportRequest {
+    items: MassExportItem[];
+    keys?: string[];           // Ключи схемы для выборки
+    addPrints?: boolean;       // Включать количество печатей
+}
+
 // Интерфейс сессии пользователя
 interface UserSession {
     zoneId: number;
@@ -650,6 +664,231 @@ class ScanExportService {
         const hours = Math.floor(minutes / 60);
         const mins = minutes % 60;
         return mins > 0 ? `${hours}ч ${mins}м` : `${hours}ч`;
+    }
+
+    /**
+     * POST /projects/:projectId/scanners/logs/mass
+     * Массовая выгрузка сканов по списку из Excel
+     */
+    async exportMassScansToExcel(req: Request, res: Response) {
+        const projectId = Number(req.params.projectId);
+        const project = req.appValues?.project as Project;
+
+        if (!project) {
+            return errorSend(res, { message: "Проект не найден" });
+        }
+
+        const body: MassExportRequest = req.body || {};
+        const { items = [], keys = [], addPrints = false } = body;
+
+        if (!items || items.length === 0) {
+            return errorSend(res, { message: "Список для выгрузки пуст" });
+        }
+
+        // 1. Получаем все зоны проекта
+        const [allZones, zonesErr] = await wrap(zonesDAL.getByProjectId(projectId));
+        if (zonesErr || !allZones) {
+            return dbError(res, "#SCANEXPORT_MASS1");
+        }
+
+        const zoneByName = new Map<string, Zone>();
+        for (const zone of allZones) {
+            zoneByName.set(zone.name.toLowerCase(), zone);
+        }
+
+        // 2. Получаем схему полей проекта
+        const [fields, fieldsErr] = await wrap(fieldDAL.getByProjectId(projectId));
+        if (fieldsErr || !fields) {
+            return dbError(res, "#SCANEXPORT_MASS2");
+        }
+
+        const codeFieldKeys = fields
+            .filter(f => f.config.type === 'code')
+            .map(f => f.key);
+
+        if (codeFieldKeys.length === 0) {
+            return errorSend(res, { message: "В проекте нет полей типа 'code'" });
+        }
+
+        const selectedFields = keys.length > 0
+            ? fields.filter(f => keys.includes(f.key))
+            : fields;
+
+        // 3. Получаем количество печатей если нужно
+        const printCounts = new Map<number, number>();
+        if (addPrints) {
+            const [counts, countsErr] = await wrap(participantLogsDAL.getPrintCountsByParticipant(projectId));
+            if (!countsErr && counts) {
+                for (const [pId, count] of counts) {
+                    printCounts.set(pId, count);
+                }
+            }
+        }
+
+        // 4. Обрабатываем каждый item и формируем Excel
+        const workbook = new Excel.Workbook();
+        const scanMode = project.scanMode || project.scan_mode || 'base';
+
+        for (const item of items) {
+            // Парсим дату и время
+            const [day, month, year] = item.date.split('.').map(Number);
+            const [timeStart, timeEnd] = item.time.split('-').map(s => s.trim());
+            const [startHour, startMin] = timeStart.split(':').map(Number);
+            const [endHour, endMin] = timeEnd.split(':').map(Number);
+
+            const dateStart = new Date(year, month - 1, day, startHour, startMin);
+            const dateEnd = new Date(year, month - 1, day, endHour, endMin);
+
+            // Находим зону по имени
+            const zone = zoneByName.get(item.zone.toLowerCase());
+            if (!zone) {
+                continue; // Пропускаем если зона не найдена
+            }
+
+            // Получаем логи для этой зоны и времени
+            const [logs, logsErr] = await wrap(scannerLogsDAL.getLogsForExport({
+                projectId,
+                zoneIds: [zone.id],
+                timeStart: dateStart,
+                timeEnd: dateEnd,
+            }));
+
+            if (logsErr || !logs || logs.length === 0) {
+                continue; // Пропускаем если нет логов
+            }
+
+            // Группируем логи по user_code
+            const logsByUser = new Map<string, ScannerLog[]>();
+            for (const log of logs) {
+                const userLogs = logsByUser.get(log.user_code) || [];
+                userLogs.push(log);
+                logsByUser.set(log.user_code, userLogs);
+            }
+
+            // Получаем участников
+            const userCodes = Array.from(logsByUser.keys());
+            const participantMap = new Map<string, Participant>();
+
+            for (const code of userCodes) {
+                const [participant] = await wrap(participantDAL.findByCode(projectId, code, codeFieldKeys));
+                if (participant) {
+                    participantMap.set(code, participant);
+                }
+            }
+
+            // Вычисляем сессии
+            const zoneMap = new Map<number, Zone>([[zone.id, zone]]);
+            const userScanData: UserScanData[] = [];
+
+            for (const [userCode, userLogs] of logsByUser) {
+                const participant = participantMap.get(userCode) || null;
+                const sessions = this.calculateSessions(
+                    userLogs,
+                    zoneMap,
+                    scanMode === 'direction'
+                );
+                const totalMinutes = sessions.reduce((sum, s) => sum + s.durationMinutes, 0);
+                const printCount = participant && addPrints
+                    ? (printCounts.get(participant.id) || 0)
+                    : 0;
+
+                userScanData.push({
+                    userCode,
+                    participant,
+                    sessions,
+                    totalMinutes,
+                    printCount,
+                });
+            }
+
+            if (userScanData.length === 0) {
+                continue; // Пропускаем если нет данных
+            }
+
+            // Создаём лист (название макс 31 символ)
+            const sheetName = item.title.substring(0, 31);
+            const worksheet = workbook.addWorksheet(sheetName);
+
+            // Заголовки колонок
+            const columns: Excel.Column[] = [];
+
+            for (const field of selectedFields) {
+                columns.push({
+                    header: field.label,
+                    key: field.key,
+                    width: 20,
+                } as Excel.Column);
+            }
+
+            columns.push({
+                header: "Время сессий",
+                key: "_sessions",
+                width: 60,
+            } as Excel.Column);
+
+            columns.push({
+                header: "Общее время",
+                key: "_total_time",
+                width: 15,
+            } as Excel.Column);
+
+            if (addPrints) {
+                columns.push({
+                    header: "Печати",
+                    key: "_prints",
+                    width: 10,
+                } as Excel.Column);
+            }
+
+            worksheet.columns = columns;
+
+            // Добавляем строки
+            for (const userData of userScanData) {
+                const row: Record<string, any> = {};
+
+                for (const field of selectedFields) {
+                    let value = userData.participant?.data[field.key];
+                    if (Array.isArray(value)) {
+                        value = value.join(', ');
+                    }
+                    row[field.key] = value || '';
+                }
+
+                row._sessions = this.formatSessions(userData.sessions, true, true);
+                row._total_time = this.formatDuration(userData.totalMinutes);
+
+                if (addPrints) {
+                    row._prints = userData.printCount;
+                }
+
+                worksheet.addRow(row);
+            }
+
+            // Стилизация заголовков
+            worksheet.getRow(1).font = { bold: true };
+            worksheet.getRow(1).fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFE0E0E0' },
+            };
+        }
+
+        if (workbook.worksheets.length === 0) {
+            return errorSend(res, { message: "Не удалось сформировать ни одного листа" });
+        }
+
+        // Отправляем файл
+        res.setHeader(
+            "Content-Type",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename=mass_scans_${projectId}_${Date.now()}.xlsx`
+        );
+
+        await workbook.xlsx.write(res);
+        res.end();
     }
 }
 

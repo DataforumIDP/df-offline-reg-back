@@ -32,6 +32,7 @@ import {
     clearPrintMarksMiddlewares,
     clearScannerLogsMiddlewares,
     exportScansMiddlewares,
+    exportMassScansMiddlewares,
     findByCodeMiddlewares,
 } from "../middlewares/projects/participantMiddlewares";
 import {
@@ -67,10 +68,10 @@ projectsRouter.post("/:projectId/print-template", assignTemplateMiddlewares, pri
 projectsRouter.delete("/:projectId/print-template", removeTemplateMiddlewares, printTemplateService.removeFromProject);
 
 // ===== Роуты webhooks проекта =====
-projectsRouter.get("/:projectId/webhooks", getSchemeMiddlewares, webhookService.getByProject.bind(webhookService));
+projectsRouter.get("/:projectId/webhooks", getSchemeMiddlewares, webhookService.getByProject);
 
 // ===== Поиск участника по коду =====
-projectsRouter.get("/:projectId/code/:code", findByCodeMiddlewares, participantCode.findByCode.bind(participantCode));
+projectsRouter.get("/:projectId/code/:code", findByCodeMiddlewares, participantCode.findByCode);
 
 // ===== Роуты логов участников (должны быть ДО роутов с :participantId) =====
 projectsRouter.get("/:projectId/participants/log/stats", getLogsMiddlewares, participantLogService.getStats);
@@ -88,7 +89,8 @@ projectsRouter.delete("/:projectId/prints", clearPrintMarksMiddlewares, particip
 projectsRouter.delete("/:projectId/scanners/logs", clearScannerLogsMiddlewares, participantLogService.clearScannerLogs);
 
 // ===== Экспорт статистики сканирований =====
-projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExportService.exportScansToExcel.bind(scanExportService));
+projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExportService.exportScansToExcel);
+projectsRouter.post("/:projectId/scanners/logs/mass", exportMassScansMiddlewares, scanExportService.exportMassScansToExcel);
 
 // ===== Роуты участников проекта =====
 projectsRouter.get("/:projectId/participants", getParticipantsMiddlewares, participant.getAll);
