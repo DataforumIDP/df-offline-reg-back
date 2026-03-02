@@ -89,8 +89,8 @@ projectsRouter.delete("/:projectId/prints", clearPrintMarksMiddlewares, particip
 projectsRouter.delete("/:projectId/scanners/logs", clearScannerLogsMiddlewares, participantLogService.clearScannerLogs);
 
 // ===== Экспорт статистики сканирований =====
-projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExportService.exportScansToExcel);
-projectsRouter.post("/:projectId/scanners/logs/mass", exportMassScansMiddlewares, scanExportService.exportMassScansToExcel);
+projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExportService.exportScansToExcel.bind(scanExportService));
+projectsRouter.post("/:projectId/scanners/logs/mass", exportMassScansMiddlewares, scanExportService.exportMassScansToExcel.bind(scanExportService));
 
 // ===== Роуты участников проекта =====
 projectsRouter.get("/:projectId/participants", getParticipantsMiddlewares, participant.getAll);
