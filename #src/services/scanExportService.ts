@@ -730,6 +730,11 @@ class ScanExportService {
         const scanMode = project.scanMode || project.scan_mode || 'base';
 
         for (const item of items) {
+            // Проверяем наличие обязательных полей
+            if (!item.date || !item.time || !item.zone) {
+                continue; // Пропускаем если нет даты, времени или зоны
+            }
+
             // Парсим дату и время
             const [day, month, year] = item.date.split('.').map(Number);
             const [timeStart, timeEnd] = item.time.split('-').map(s => s.trim());
