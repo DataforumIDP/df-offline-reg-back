@@ -742,7 +742,9 @@ class ScanExportService {
             }
             const [day, month, year] = dateParts.map(Number);
 
-            const timeParts = item.time.split('-');
+            // Поддержка разных типов тире: обычное -, среднее – (en dash), длинное — (em dash)
+            const timeNormalized = item.time.replace(/[–—]/g, '-').trim();
+            const timeParts = timeNormalized.split('-');
             if (timeParts.length !== 2) {
                 continue; // Неверный формат времени
             }
