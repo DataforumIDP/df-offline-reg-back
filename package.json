@@ -1,6 +1,6 @@
 {
     "name": "back.ofline-registration",
-    "version": "0.0.1-a",
+    "version": "0.0.5-a",
     "main": "index.js",
     "license": "MIT",
     "scripts": {
