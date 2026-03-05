@@ -5,6 +5,9 @@ import {
     scannerGetProjectMiddlewares,
     scannerGetParticipantMiddlewares,
     scannerUploadLogsMiddlewares,
+    scannerCheckoutMiddlewares,
+    scannerCheckinMiddlewares,
+    scannerMarkMiddlewares,
 } from "../middlewares/scannerMiddlewares";
 
 export const scannerRouter = Router();
@@ -53,4 +56,37 @@ scannerRouter.post(
     "/logs/upload",
     scannerUploadLogsMiddlewares,
     scannerService.uploadLogs
+);
+
+/**
+ * POST /scanner/checkout
+ * Отметить устройство как выданное
+ * Требует: X-Access-Key, X-Secret-Key, X-Scanner-Id заголовки
+ */
+scannerRouter.post(
+    "/checkout",
+    scannerCheckoutMiddlewares,
+    scannerService.checkout.bind(scannerService)
+);
+
+/**
+ * POST /scanner/checkin
+ * Отметить устройство как сданное
+ * Требует: X-Access-Key, X-Secret-Key, X-Scanner-Id заголовки
+ */
+scannerRouter.post(
+    "/checkin",
+    scannerCheckinMiddlewares,
+    scannerService.checkin.bind(scannerService)
+);
+
+/**
+ * POST /scanner/mark/:participantId
+ * Отметить участника (isMark-поле → true)
+ * Требует: X-Access-Key, X-Secret-Key, X-Scanner-Id заголовки
+ */
+scannerRouter.post(
+    "/mark/:participantId",
+    scannerMarkMiddlewares,
+    scannerService.markParticipant.bind(scannerService)
 );

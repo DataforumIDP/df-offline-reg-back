@@ -253,3 +253,20 @@ export const scannerUploadLogsMiddlewares = [
     ...uploadLogItemValidation,
     inputValidationMiddleware,
 ];
+
+export const scannerCheckoutMiddlewares = [
+    scannerAuthMiddleware,
+    scannerRegisteredMiddleware,
+];
+
+export const scannerCheckinMiddlewares = [
+    scannerAuthMiddleware,
+    scannerRegisteredMiddleware,
+];
+
+export const scannerMarkMiddlewares = [
+    scannerAuthMiddleware,
+    scannerRegisteredMiddleware,
+    param("participantId").isInt({ min: 1 }).withMessage("participantId должен быть числом"),
+    inputValidationMiddleware,
+];

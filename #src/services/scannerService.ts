@@ -217,6 +217,138 @@ export class ScannerService {
             total: logs.length,
         });
     }
+
+    /**
+     * POST /scanner/checkout
+     * Отметить устройство как выданное
+     */
+    async checkout(req: Request, res: Response) {
+        if (!req.scannerAuth) {
+            return res.status(401).json({ error: "Не авторизован" });
+        }
+
+        const scanner = req.scannerAuth.scanner;
+        if (!scanner) {
+            return res.status(404).json({ error: "Сканер не найден" });
+        }
+
+        const [result, err] = await wrap(scannersDAL.checkout(scanner.scanner_id));
+
+        if (err || !result) {
+            return dbError(res, "#SCANNER_CHECKOUT1");
+        }
+
+        res.json({
+            message: "Устройство выдано",
+            scanner: ScannerHelper.toJSON(result),
+        });
+    }
+
+    /**
+     * POST /scanner/checkin
+     * Отметить устройство как сданное
+     */
+    async checkin(req: Request, res: Response) {
+        if (!req.scannerAuth) {
+            return res.status(401).json({ error: "Не авторизован" });
+        }
+
+        const scanner = req.scannerAuth.scanner;
+        if (!scanner) {
+            return res.status(404).json({ error: "Сканер не найден" });
+        }
+
+        const [result, err] = await wrap(scannersDAL.checkin(scanner.scanner_id));
+
+        if (err || !result) {
+            return dbError(res, "#SCANNER_CHECKIN1");
+        }
+
+        res.json({
+            message: "Устройство сдано",
+            scanner: ScannerHelper.toJSON(result),
+        });
+    }
+
+    /**
+     * POST /scanner/mark/:participantId
+     * Отметить участника (установить isMark-поле в true)
+     * Сканер отправляет ID участника, сервер находит поле с isMark и обновляет его
+     */
+    async markParticipant(req: Request, res: Response) {
+        if (!req.scannerAuth) {
+            return res.status(401).json({ error: "Не авторизован" });
+        }
+
+        const project = req.scannerAuth.project;
+        const { participantId } = req.params;
+
+        // 1. Находим поле с isMark: true в схеме проекта
+        const [fields, fieldsErr] = await wrap(
+            projectFieldsDAL.getByProjectId(project.id)
+        );
+
+        if (fieldsErr) {
+            return dbError(res, "#SCANNER_MARK1");
+        }
+
+        const markField = (fields || []).find(
+            (f) => f.config.type === "bool" && f.config.isMark === true
+        );
+
+        if (!markField) {
+            return res.status(400).json({
+                error: "В проекте нет поля с флагом отметки",
+                code: "NO_MARK_FIELD",
+            });
+        }
+
+        // 2. Получаем участника
+        const [participant, participantErr] = await wrap(
+            participantsDAL.getById(Number(participantId))
+        );
+
+        if (participantErr) {
+            return dbError(res, "#SCANNER_MARK2");
+        }
+
+        if (!participant || participant.project_id !== project.id) {
+            return res.status(404).json({
+                error: "Участник не найден",
+                code: "PARTICIPANT_NOT_FOUND",
+            });
+        }
+
+        // 3. Проверяем, не отмечен ли уже
+        const currentValue = participant.data?.[markField.key];
+        if (currentValue === true) {
+            return res.status(409).json({
+                error: "Участник уже отмечен",
+                code: "ALREADY_MARKED",
+                field: markField.label,
+            });
+        }
+
+        // 4. Обновляем поле
+        const newData = {
+            ...participant.data,
+            [markField.key]: true,
+        };
+
+        const [updated, updateErr] = await wrap(
+            participantsDAL.update(participant.id, newData)
+        );
+
+        if (updateErr || !updated) {
+            return dbError(res, "#SCANNER_MARK3");
+        }
+
+        res.json({
+            message: "Участник отмечен",
+            participant: ParticipantHelper.toJSON(updated),
+            markField: markField.label,
+        });
+    }
 }
 
 export const scannerService = new ScannerService();

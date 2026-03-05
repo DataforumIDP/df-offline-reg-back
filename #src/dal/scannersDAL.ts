@@ -77,6 +77,7 @@ export class ScannersDAL {
 
     /**
      * Создать или обновить сканер
+     * При подключении автоматически помечает устройство как выданное
      */
     async upsert(data: CreateScannerDTO): Promise<Scanner> {
         // Проверяем, есть ли уже такой сканер
@@ -86,6 +87,7 @@ export class ScannersDAL {
 
         if (existing) {
             // Обновляем привязку к проекту и зоне
+            // При переконфигурации также помечаем как выданное
             const [updated] = await db(this.table)
                 .where({ id: existing.id })
                 .update({
@@ -93,13 +95,15 @@ export class ScannersDAL {
                     zone_id: data.zoneId,
                     name: data.name || existing.name,
                     last_seen_at: db.fn.now(),
+                    is_checked_out: true,
+                    checked_out_at: db.fn.now(),
                     updated_at: db.fn.now(),
                 })
                 .returning("*");
             return updated;
         }
 
-        // Создаём новый сканер
+        // Создаём новый сканер (автоматически помечен как выданный)
         const [scanner] = await db(this.table)
             .insert({
                 scanner_id: data.scannerId,
@@ -107,6 +111,8 @@ export class ScannersDAL {
                 zone_id: data.zoneId,
                 name: data.name || null,
                 last_seen_at: db.fn.now(),
+                is_checked_out: true,
+                checked_out_at: db.fn.now(),
             })
             .returning("*");
 
@@ -136,6 +142,26 @@ export class ScannersDAL {
         return db(this.table)
             .where({ project_id: projectId })
             .orderBy("created_at", "desc");
+    }
+
+    /**
+     * Получить все сканеры проекта с информацией о зонах
+     */
+    async getByProjectIdWithZones(projectId: number): Promise<(Scanner & { zoneName: string })[]> {
+        const results = await db(this.table)
+            .select(
+                `${this.table}.*`,
+                "zones.name as zone_name"
+            )
+            .leftJoin("zones", `${this.table}.zone_id`, "zones.id")
+            .where({ [`${this.table}.project_id`]: projectId })
+            .orderBy("zones.name", "asc")
+            .orderBy(`${this.table}.name`, "asc");
+        
+        return results.map((r: any) => ({
+            ...r,
+            zoneName: r.zone_name,
+        }));
     }
 
     /**
@@ -193,6 +219,36 @@ export class ScannersDAL {
         await db(this.table)
             .where({ id })
             .update({ last_seen_at: db.fn.now() });
+    }
+
+    /**
+     * Выдать устройство (checkout)
+     */
+    async checkout(scannerId: string): Promise<Scanner | null> {
+        const [scanner] = await db(this.table)
+            .where({ scanner_id: scannerId })
+            .update({
+                is_checked_out: true,
+                checked_out_at: db.fn.now(),
+                updated_at: db.fn.now(),
+            })
+            .returning("*");
+        return scanner || null;
+    }
+
+    /**
+     * Сдать устройство (checkin)
+     */
+    async checkin(scannerId: string): Promise<Scanner | null> {
+        const [scanner] = await db(this.table)
+            .where({ scanner_id: scannerId })
+            .update({
+                is_checked_out: false,
+                checked_out_at: null,
+                updated_at: db.fn.now(),
+            })
+            .returning("*");
+        return scanner || null;
     }
 
     /**

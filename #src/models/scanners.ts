@@ -57,6 +57,8 @@ export interface Scanner {
     zone_id: number;
     name: string | null;
     last_seen_at: Date | null;
+    is_checked_out: boolean;
+    checked_out_at: Date | null;
     created_at: Date;
     updated_at: Date;
 }
@@ -82,6 +84,8 @@ export class ScannerHelper {
             zoneId: scanner.zone_id,
             name: scanner.name,
             lastSeenAt: scanner.last_seen_at,
+            isCheckedOut: scanner.is_checked_out,
+            checkedOutAt: scanner.checked_out_at,
             createdAt: scanner.created_at,
             updatedAt: scanner.updated_at,
         };

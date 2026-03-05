@@ -23,6 +23,7 @@ export interface ProjectFieldConfig {
     maxLength?: number;
     listSettings?: ListSettings;
     random?: boolean; // true = генерировать случайные значения
+    isMark?: boolean; // true = поле-отметка для режима выдачи сканера (только для bool)
 }
 
 // Интерфейс поля проекта
@@ -131,6 +132,13 @@ export class ProjectFieldHelper {
         if (config.random) {
             if (config.type !== 'code') {
                 return { valid: false, error: 'Флаг random можно использовать только для типа code' };
+            }
+        }
+
+        // Проверка для флага isMark — только для типа bool
+        if (config.isMark) {
+            if (config.type !== 'bool') {
+                return { valid: false, error: 'Флаг isMark можно использовать только для типа bool (чекбокс)' };
             }
         }
 

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import { ProjectService } from "../services/projectService";
 import { ProjectFieldService } from "../services/projectFieldService";
 import { ParticipantService, ParticipantCodeService } from "../services/participantService";
@@ -6,6 +6,10 @@ import { participantLogService } from "../services/participantLogService";
 import { scanExportService } from "../services/scanExportService";
 import { printTemplateService } from "../services/printTemplateService";
 import { webhookService } from "../services/webhookService";
+import { scannersDAL } from "../dal/scannersDAL";
+import { ScannerHelper } from "../models/scanners";
+import { wrap } from "../utils/wrap";
+import { dbError } from "../utils/errors";
 import { createMiddlewares } from "../middlewares/projects/createMiddlewares";
 import { updateMiddlewares } from "../middlewares/projects/updateMiddlewares";
 import { deleteMiddlewares } from "../middlewares/projects/deleteMiddlewares";
@@ -87,6 +91,24 @@ projectsRouter.delete("/:projectId/participants", clearParticipantsMiddlewares, 
 // ===== Очистка отметок печати и логов сканеров =====
 projectsRouter.delete("/:projectId/prints", clearPrintMarksMiddlewares, participantLogService.clearPrintMarks);
 projectsRouter.delete("/:projectId/scanners/logs", clearScannerLogsMiddlewares, participantLogService.clearScannerLogs);
+
+// ===== Получение списка устройств проекта =====
+projectsRouter.get("/:projectId/devices", getSchemeMiddlewares, async (req: Request, res: Response) => {
+    const projectId = Number(req.params.projectId);
+    
+    const [scanners, err] = await wrap(scannersDAL.getByProjectIdWithZones(projectId));
+    
+    if (err) {
+        return dbError(res, "#GETDEVICES1");
+    }
+    
+    res.json(
+        (scanners || []).map((s) => ({
+            ...ScannerHelper.toJSON(s),
+            zoneName: s.zoneName,
+        }))
+    );
+});
 
 // ===== Экспорт статистики сканирований =====
 projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExportService.exportScansToExcel.bind(scanExportService));

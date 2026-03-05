@@ -36,6 +36,18 @@ export class ProjectFieldService {
 
         try {
             const result = await db.transaction(async (trx: any) => {
+                // Если isMark: true — проверяем, что нет другого поля с isMark в проекте
+                if (config?.isMark === true) {
+                    const existingMark = await trx('project_fields')
+                        .where({ project_id: projectId, is_delete: false })
+                        .whereRaw("(config->>'isMark')::boolean = true")
+                        .first()
+
+                    if (existingMark) {
+                        throw new Error(`VALIDATION:Поле "${existingMark.label}" уже имеет флаг отметки. Снимите его перед установкой нового.`)
+                    }
+                }
+
                 // Создаём поле
                 const field = await trx('project_fields')
                     .insert({
@@ -87,6 +99,9 @@ export class ProjectFieldService {
 
             response201(res, ProjectFieldHelper.toJSON(result))
         } catch (e) {
+            if (e instanceof Error && e.message.startsWith('VALIDATION:')) {
+                return errorSend(res, { config: e.message.replace('VALIDATION:', '') }, { code: 400 })
+            }
             console.error('[Create Field Error]', e)
             return dbError(res, '#CREATEFIELD1')
         }
@@ -139,6 +154,19 @@ export class ProjectFieldService {
 
         try {
             const result = await db.transaction(async (trx: any) => {
+                // Если isMark: true — проверяем, что нет другого поля с isMark в проекте
+                if (config?.isMark === true && !(existing.config as any)?.isMark) {
+                    const existingMark = await trx('project_fields')
+                        .where({ project_id: projectId, is_delete: false })
+                        .whereNot({ id: fieldId })
+                        .whereRaw("(config->>'isMark')::boolean = true")
+                        .first()
+
+                    if (existingMark) {
+                        throw new Error(`VALIDATION:Поле "${existingMark.label}" уже имеет флаг отметки. Снимите его перед установкой нового.`)
+                    }
+                }
+
                 // Обновляем поле
                 const updated = await fieldDAL.updateFieldFull(
                     fieldId,
@@ -253,6 +281,10 @@ export class ProjectFieldService {
 
             res.json(ProjectFieldHelper.toJSON(result))
         } catch (e) {
+            // Обработка ошибок валидации (isMark и др.)
+            if (e instanceof Error && e.message.startsWith('VALIDATION:')) {
+                return errorSend(res, { config: e.message.replace('VALIDATION:', '') }, { code: 400 })
+            }
             console.error('[Field Update Error]', e)
             return dbError(res, '#UPDATEFIELD5')
         }
