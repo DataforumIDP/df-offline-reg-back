@@ -9,6 +9,7 @@ import { ProjectFieldHelper } from "../models/projectFields";
 import { dbError } from "../utils/errors";
 import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
+import { normalizeParticipantPhones, getPhoneFieldKeys } from "../utils/phoneUtils";
 
 const participantsDAL = new ParticipantsDAL();
 const fieldsDAL = new ProjectFieldsDAL();
@@ -238,11 +239,15 @@ export class WebhookService {
             return res.status(400).json({ success: false, errors });
         }
 
+        // Нормализуем телефонные номера
+        const phoneFieldKeys = getPhoneFieldKeys(fields as any);
+        const normalizedData = normalizeParticipantPhones(validatedData, phoneFieldKeys);
+
         // Создаём участника
         const [participant, createErr] = await wrap(
             participantsDAL.create({
                 project_id: projectId,
-                data: validatedData,
+                data: normalizedData,
             })
         );
 

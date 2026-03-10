@@ -12,6 +12,7 @@ import { Participant } from "../models/participants";
 import { Project, ScanMode } from "../models/projects";
 import { wrap } from "../utils/wrap";
 import { dbError, errorSend } from "../utils/errors";
+import { formatPhone, getPhoneFieldKeys } from "../utils/phoneUtils";
 
 const fieldDAL = new ProjectFieldsDAL();
 const participantDAL = new ParticipantsDAL();
@@ -293,6 +294,9 @@ class ScanExportService {
 
         worksheet.columns = columns;
 
+        // Получаем ключи телефонных полей для форматирования
+        const phoneFieldKeys = getPhoneFieldKeys(fields as any);
+
         // Добавляем строки
         for (const userData of userScanData) {
             const row: Record<string, any> = {};
@@ -302,6 +306,10 @@ class ScanExportService {
                 let value = userData.participant?.data[field.key];
                 if (Array.isArray(value)) {
                     value = value.join(', ');
+                }
+                // Форматируем телефоны для экспорта
+                if (phoneFieldKeys.includes(field.key) && value) {
+                    value = formatPhone(value);
                 }
                 row[field.key] = value || '';
             }
@@ -800,7 +808,7 @@ class ScanExportService {
 
         const zoneByName = new Map<string, Zone>();
         for (const zone of allZones) {
-            zoneByName.set(zone.name.toLowerCase(), zone);
+            zoneByName.set(zone.name.trim().toLowerCase(), zone);
         }
 
         // 2. Получаем схему полей проекта
@@ -821,6 +829,9 @@ class ScanExportService {
             ? fields.filter(f => keys.includes(f.key))
             : fields;
 
+        // Получаем ключи телефонных полей для форматирования
+        const phoneFieldKeys = getPhoneFieldKeys(fields as any);
+
         // 3. Получаем количество печатей если нужно
         const printCounts = new Map<number, number>();
         if (addPrints) {
@@ -839,12 +850,14 @@ class ScanExportService {
         for (const item of items) {
             // Проверяем наличие обязательных полей
             if (!item.date || !item.time || !item.zone) {
+                console.log('[MassExport] Пропуск строки - отсутствуют обязательные поля:', { date: item.date, time: item.time, zone: item.zone });
                 continue; // Пропускаем если нет даты, времени или зоны
             }
 
             // Парсим дату и время с валидацией формата
             const dateParts = item.date.split('.');
             if (dateParts.length !== 3) {
+                console.log('[MassExport] Пропуск строки - неверный формат даты:', item.date);
                 continue; // Неверный формат даты
             }
             const [day, month, year] = dateParts.map(Number);
@@ -853,6 +866,7 @@ class ScanExportService {
             const timeNormalized = item.time.replace(/[–—]/g, '-').trim();
             const timeParts = timeNormalized.split('-');
             if (timeParts.length !== 2) {
+                console.log('[MassExport] Пропуск строки - неверный формат времени:', item.time, '-> normalized:', timeNormalized);
                 continue; // Неверный формат времени
             }
             const [timeStart, timeEnd] = timeParts.map(s => s.trim());
@@ -860,17 +874,33 @@ class ScanExportService {
             const timeStartParts = timeStart.split(':');
             const timeEndParts = timeEnd.split(':');
             if (timeStartParts.length < 2 || timeEndParts.length < 2) {
+                console.log('[MassExport] Пропуск строки - неверный формат времени (нет минут):', { timeStart, timeEnd });
                 continue; // Неверный формат времени
             }
             const [startHour, startMin] = timeStartParts.map(Number);
             const [endHour, endMin] = timeEndParts.map(Number);
 
-            const dateStart = new Date(year, month - 1, day, startHour, startMin);
-            const dateEnd = new Date(year, month - 1, day, endHour, endMin);
+            // Создаём даты в UTC, компенсируя Moscow UTC+3
+            // Пользователь вводит московское время, а в БД хранится UTC
+            const MOSCOW_OFFSET_MS = 3 * 60 * 60 * 1000;
+            const dateStart = new Date(Date.UTC(year, month - 1, day, startHour, startMin) - MOSCOW_OFFSET_MS);
+            const dateEnd = new Date(Date.UTC(year, month - 1, day, endHour, endMin) - MOSCOW_OFFSET_MS);
 
-            // Находим зону по имени
-            const zone = zoneByName.get(item.zone.toLowerCase());
+            // Находим зону по имени (также проверяем без суффикса после ::)
+            let zoneName = item.zone.trim().toLowerCase();
+            let zone = zoneByName.get(zoneName);
+            
+            // Если зона не найдена и есть ::, пробуем без суффикса
+            if (!zone && zoneName.includes('::')) {
+                const zoneNameWithoutSuffix = zoneName.split('::')[0];
+                zone = zoneByName.get(zoneNameWithoutSuffix);
+                if (zone) {
+                    console.log('[MassExport] Зона найдена без суффикса:', { original: item.zone, matched: zone.name });
+                }
+            }
+            
             if (!zone) {
+                console.log('[MassExport] Пропуск строки - зона не найдена:', item.zone, 'Доступные зоны:', Array.from(zoneByName.keys()));
                 continue; // Пропускаем если зона не найдена
             }
 
@@ -888,8 +918,19 @@ class ScanExportService {
             }));
 
             if (logsErr || !logs || logs.length === 0) {
+                console.log('[MassExport] Пропуск строки - нет логов:', { 
+                    zone: zone.name, 
+                    zoneId: zone.id,
+                    dateStart: dateStart.toISOString(), 
+                    dateEnd: dateEnd.toISOString(),
+                    queryTimeStart: queryTimeStart.toISOString(),
+                    logsErr: logsErr?.message,
+                    logsCount: logs?.length || 0
+                });
                 continue; // Пропускаем если нет логов
             }
+
+            console.log('[MassExport] Найдено логов:', logs.length, 'для зоны:', zone.name, 'период:', dateStart.toISOString(), '-', dateEnd.toISOString());
 
             // Группируем логи по user_code
             const logsByUser = new Map<string, ScannerLog[]>();
@@ -952,11 +993,33 @@ class ScanExportService {
             }
 
             if (userScanData.length === 0) {
+                console.log('[MassExport] Пропуск строки - нет данных после обработки сессий:', { 
+                    zone: zone.name, 
+                    title: item.title,
+                    logsCount: logs.length,
+                    uniqueUsers: logsByUser.size
+                });
                 continue; // Пропускаем если нет данных
             }
 
-            // Создаём лист (название макс 31 символ)
-            const sheetName = item.title.substring(0, 31);
+            console.log('[MassExport] Создаём лист:', item.title, 'участников:', userScanData.length);
+
+            // Создаём лист (название макс 31 символ, без запрещённых символов)
+            let sheetName = item.title
+                .replace(/[\\/*?:\[\]]/g, '') // Убираем запрещённые Excel символы
+                .substring(0, 31)
+                .trim();
+            
+            // Дедупликация: если лист с таким именем уже есть, добавляем суффикс
+            const existingNames = new Set(workbook.worksheets.map(ws => ws.name));
+            if (existingNames.has(sheetName)) {
+                let suffix = 2;
+                while (existingNames.has(sheetName.substring(0, 28) + ` (${suffix})`)) {
+                    suffix++;
+                }
+                sheetName = sheetName.substring(0, 28) + ` (${suffix})`;
+            }
+            
             const worksheet = workbook.addWorksheet(sheetName);
 
             // Заголовки колонок
@@ -1000,6 +1063,10 @@ class ScanExportService {
                     let value = userData.participant?.data[field.key];
                     if (Array.isArray(value)) {
                         value = value.join(', ');
+                    }
+                    // Форматируем телефоны для экспорта
+                    if (phoneFieldKeys.includes(field.key) && value) {
+                        value = formatPhone(value);
                     }
                     row[field.key] = value || '';
                 }

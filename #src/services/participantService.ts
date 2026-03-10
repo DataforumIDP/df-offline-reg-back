@@ -9,6 +9,7 @@ import { dbError, errorSend } from "../utils/errors";
 import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
 import { paginationResponse } from "../utils/paginationUtils";
+import { normalizeParticipantPhones, formatParticipantPhones, getPhoneFieldKeys } from "../utils/phoneUtils";
 
 const participantDAL = new ParticipantsDAL();
 const fieldDAL = new ProjectFieldsDAL();
@@ -87,6 +88,11 @@ export class ParticipantService {
                     }
                 }
             }
+
+            // Нормализуем телефонные номера
+            const phoneFieldKeys = getPhoneFieldKeys(fields as any);
+            const normalizedData = normalizeParticipantPhones(data, phoneFieldKeys);
+            Object.assign(data, normalizedData);
         }
 
         const [participant, err] = await wrap(participantDAL.create({
@@ -118,8 +124,15 @@ export class ParticipantService {
     async update(req: Request, res: Response) {
         const projectId = Number(req.params.projectId);
         const participantId = Number(req.params.participantId);
-        const data = req.body;
+        let data = { ...req.body };
         const userId = req.account?.id || null;
+
+        // Получаем схему проекта для нормализации телефонов
+        const [fields] = await wrap(fieldDAL.getByProjectId(projectId));
+        if (fields) {
+            const phoneFieldKeys = getPhoneFieldKeys(fields as any);
+            data = normalizeParticipantPhones(data, phoneFieldKeys);
+        }
 
         const [updated, err] = await wrap(participantDAL.update(participantId, data));
 
@@ -400,7 +413,10 @@ export class ParticipantService {
             }
 
             if (errors.filter(e => e.row === rowNum).length === 0) {
-                validRows.push(rowData);
+                // Нормализуем телефонные номера перед добавлением
+                const phoneFieldKeys = getPhoneFieldKeys(fields as any);
+                const normalizedRow = normalizeParticipantPhones(rowData, phoneFieldKeys);
+                validRows.push(normalizedRow);
             }
         }
 
@@ -487,6 +503,9 @@ export class ParticipantService {
         ];
         worksheet.columns = columns;
 
+        // Получаем ключи телефонных полей для форматирования
+        const phoneFieldKeys = getPhoneFieldKeys(fields as any);
+
         // Подготавливаем строки с печатями
         let rowsData = participants.map((p: any) => {
             const row: Record<string, any> = {
@@ -494,8 +513,11 @@ export class ParticipantService {
                 _created_at: p.created_at,
             };
             
+            // Форматируем телефоны для экспорта
+            const formattedData = formatParticipantPhones(p.data, phoneFieldKeys);
+            
             for (const field of fields) {
-                let value = p.data[field.key];
+                let value = formattedData[field.key];
                 
                 // Преобразование массивов в строку
                 if (Array.isArray(value)) {

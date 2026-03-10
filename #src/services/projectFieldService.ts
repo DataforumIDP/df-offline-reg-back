@@ -6,6 +6,7 @@ import { errorSend } from '../utils/errors'
 import { wrap } from '../utils/wrap'
 import { response201, response204 } from '../utils/responses'
 import { db } from '../config/db'
+import { normalizePhone } from '../utils/phoneUtils'
 
 const fieldDAL = new ProjectFieldsDAL()
 
@@ -82,6 +83,42 @@ export class ProjectFieldService {
                             const newData = {
                                 ...currentData,
                                 [key]: ProjectFieldHelper.generateRandomValue(),
+                            }
+
+                            await trx('participants')
+                                .where({ id: participant.id })
+                                .update({
+                                    data: JSON.stringify(newData),
+                                    updated_at: trx.fn.now(),
+                                })
+                        }
+                    }
+                }
+
+                // Если тип text и isPhone: true — нормализуем номера для существующих участников
+                if (config?.type === 'text' && config?.isPhone === true) {
+                    // Проверяем безопасность ключа
+                    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+                        throw new Error('Invalid key format')
+                    }
+
+                    // Получаем всех участников проекта, у которых есть значение в этом поле
+                    const participants = await trx('participants')
+                        .select('id', 'data')
+                        .where({ project_id: projectId })
+                        .whereRaw(`jsonb_exists(data, '${key}')`)
+                        .whereRaw(`COALESCE(data->>'${key}', '') != ''`)
+
+                    for (const participant of participants) {
+                        const currentData = participant.data || {}
+                        const currentValue = currentData[key]
+                        const normalizedValue = normalizePhone(currentValue)
+
+                        // Обновляем только если значение изменилось
+                        if (currentValue !== normalizedValue) {
+                            const newData = {
+                                ...currentData,
+                                [key]: normalizedValue,
                             }
 
                             await trx('participants')
@@ -271,6 +308,40 @@ export class ProjectFieldService {
                                 data: JSON.stringify(newData),
                                 updated_at: trx.fn.now(),
                             })
+                    }
+                }
+
+                // Если тип text и isPhone изменился на true — нормализуем существующие номера
+                const oldIsPhone = (existing.config as any)?.isPhone
+                const newIsPhone = (config as any)?.isPhone
+
+                if (configType === 'text' && newIsPhone === true && oldIsPhone !== true) {
+                    // Получаем участников, у которых есть значение в этом поле
+                    const participantsWithPhone = await trx('participants')
+                        .select('id', 'data')
+                        .where({ project_id: projectId })
+                        .whereRaw(`jsonb_exists(data, '${key}')`)
+                        .whereRaw(`COALESCE(data->>'${key}', '') != ''`)
+
+                    for (const participant of participantsWithPhone) {
+                        const currentData = participant.data || {}
+                        const currentValue = currentData[key]
+                        const normalizedValue = normalizePhone(currentValue)
+
+                        // Обновляем только если значение изменилось
+                        if (currentValue !== normalizedValue) {
+                            const newData = {
+                                ...currentData,
+                                [key]: normalizedValue,
+                            }
+
+                            await trx('participants')
+                                .where({ id: participant.id })
+                                .update({
+                                    data: JSON.stringify(newData),
+                                    updated_at: trx.fn.now(),
+                                })
+                        }
                     }
                 }
 
