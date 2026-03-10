@@ -70,6 +70,11 @@ JWT_REFRESH_SECRET=your_refresh_secret_key_here
 # Server
 PORT=3000
 NODE_ENV=development
+
+# First admin seed (опционально)
+FIRST_ADMIN_LOGIN=admin@dtf.su
+FIRST_ADMIN_PASSWORD=ecdc166ed2f2943d8
+FIRST_ADMIN_NAME=Администратор
 ```
 
 ### 4. Создание базы данных
@@ -95,8 +100,9 @@ yarn seed
 ```
 
 По умолчанию будет создан администратор:
-- **Login**: admin
-- **Password**: admin123
+- **Login**: `FIRST_ADMIN_LOGIN` (по умолчанию `admin@dtf.su`)
+- **Password**: `FIRST_ADMIN_PASSWORD` (по умолчанию `ecdc166ed2f2943d8`)
+- **Name**: `FIRST_ADMIN_NAME` (по умолчанию `Администратор`)
 
 ## Запуск
 
