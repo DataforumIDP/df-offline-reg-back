@@ -93,6 +93,7 @@ projectsRouter.delete("/:projectId/prints", clearPrintMarksMiddlewares, particip
 projectsRouter.delete("/:projectId/scanners/logs", clearScannerLogsMiddlewares, participantLogService.clearScannerLogs);
 
 // ===== Получение списка устройств проекта =====
+//FIXME: вынести логику
 projectsRouter.get("/:projectId/devices", getSchemeMiddlewares, async (req: Request, res: Response) => {
     const projectId = Number(req.params.projectId);
     
@@ -111,6 +112,7 @@ projectsRouter.get("/:projectId/devices", getSchemeMiddlewares, async (req: Requ
 });
 
 // ===== Экспорт статистики сканирований =====
+//FIXME: .bind x2
 projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExportService.exportScansToExcel.bind(scanExportService));
 projectsRouter.post("/:projectId/scanners/logs/mass", exportMassScansMiddlewares, scanExportService.exportMassScansToExcel.bind(scanExportService));
 

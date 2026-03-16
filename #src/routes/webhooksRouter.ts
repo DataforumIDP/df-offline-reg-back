@@ -14,6 +14,7 @@ import { tildaMiddleware } from "../middlewares/common/tildaMiddleware";
 
 const router = Router();
 
+//FIXME: везде .bind
 // ========== Публичный эндпоинт для приёма данных ==========
 
 /**
