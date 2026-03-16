@@ -58,6 +58,8 @@ scannerRouter.post(
     scannerService.uploadLogs
 );
 
+//FIXME: .bind x3
+
 /**
  * POST /scanner/checkout
  * Отметить устройство как выданное

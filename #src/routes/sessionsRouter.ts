@@ -9,6 +9,8 @@ export const sessionsRouter = Router();
 // Все роуты требуют авторизации админа
 const adminAuth = [authenticateJWT(), roleCheck(adminRoles)];
 
+//FIXME: .bind x3
+
 // Получить свои сессии
 sessionsRouter.get("/", adminAuth, sessionService.getMySessions.bind(sessionService));
 

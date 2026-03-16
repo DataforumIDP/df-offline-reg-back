@@ -11,6 +11,9 @@ export const qrAuthRouter = Router();
  * Подтверждает авторизацию по QR коду
  * Требует авторизации админа
  */
+
+//FIXME: вынести логику
+
 qrAuthRouter.post(
     "/confirm",
     authenticateJWT(),

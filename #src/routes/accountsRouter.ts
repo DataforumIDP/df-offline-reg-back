@@ -13,6 +13,7 @@ export const accountsRouter = Router();
 
 const account = new AccountService();
 
+//FIXME: не актуально 
 accountsRouter.post("/", createMiddlewares, account.crete);
 accountsRouter.post("/reg", registerMiddlewares, account.register);
 
@@ -26,6 +27,7 @@ accountsRouter.post("/auth/admin", authMiddlewares, account.authbr(adminRoles, t
 accountsRouter.post("/auth/refresh", refreshMiddlewares, account.refreshToken);
 
 accountsRouter.get("/self", authenticateJWT(true), account.self);
+//FIXME: не работает
 accountsRouter.get("/", [authenticateJWT(true)], account.get);
 accountsRouter.get("/:id", [authenticateJWT(true)], account.getOne);
 accountsRouter.patch("/:id", updateMiddlewares, account.update);
