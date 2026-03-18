@@ -58,8 +58,6 @@ scannerRouter.post(
     scannerService.uploadLogs
 );
 
-//FIXME: .bind x3
-
 /**
  * POST /scanner/checkout
  * Отметить устройство как выданное
@@ -68,7 +66,7 @@ scannerRouter.post(
 scannerRouter.post(
     "/checkout",
     scannerCheckoutMiddlewares,
-    scannerService.checkout.bind(scannerService)
+    scannerService.checkout
 );
 
 /**
@@ -79,7 +77,7 @@ scannerRouter.post(
 scannerRouter.post(
     "/checkin",
     scannerCheckinMiddlewares,
-    scannerService.checkin.bind(scannerService)
+    scannerService.checkin
 );
 
 /**
@@ -90,5 +88,5 @@ scannerRouter.post(
 scannerRouter.post(
     "/mark/:participantId",
     scannerMarkMiddlewares,
-    scannerService.markParticipant.bind(scannerService)
+    scannerService.markParticipant
 );

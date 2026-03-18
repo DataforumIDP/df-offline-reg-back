@@ -14,7 +14,7 @@ import { tildaMiddleware } from "../middlewares/common/tildaMiddleware";
 
 const router = Router();
 
-//FIXME: везде .bind
+
 // ========== Публичный эндпоинт для приёма данных ==========
 
 /**
@@ -28,7 +28,7 @@ router.post(
     tildaMiddleware,
     webhookLoggingMiddleware, // Логируем запрос и ответ
     webhookActiveMiddleware,  // Проверяем что webhook активен
-    webhookService.receive.bind(webhookService)
+    webhookService.receive
 );
 
 // ========== Административные эндпоинты ==========
@@ -42,7 +42,7 @@ router.post(
     authenticateJWT(),
     roleCheck(adminRoles),
     validateCreateWebhook,
-    webhookService.create.bind(webhookService)
+    webhookService.create
 );
 
 /**
@@ -54,7 +54,7 @@ router.get(
     authenticateJWT(),
     roleCheck(adminRoles),
     webhookExistsMiddleware,
-    webhookService.getOne.bind(webhookService)
+    webhookService.getOne
 );
 
 /**
@@ -67,7 +67,7 @@ router.put(
     roleCheck(adminRoles),
     webhookExistsMiddleware,
     validateUpdateWebhook,
-    webhookService.update.bind(webhookService)
+    webhookService.update
 );
 
 /**
@@ -79,7 +79,7 @@ router.delete(
     authenticateJWT(),
     roleCheck(adminRoles),
     webhookExistsMiddleware,
-    webhookService.delete.bind(webhookService)
+    webhookService.delete
 );
 
 /**
@@ -91,7 +91,7 @@ router.get(
     authenticateJWT(),
     roleCheck(adminRoles),
     webhookExistsMiddleware,
-    webhookService.getLogs.bind(webhookService)
+    webhookService.getLogs
 );
 
 export default router;

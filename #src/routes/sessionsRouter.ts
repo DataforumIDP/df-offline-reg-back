@@ -9,13 +9,11 @@ export const sessionsRouter = Router();
 // Все роуты требуют авторизации админа
 const adminAuth = [authenticateJWT(), roleCheck(adminRoles)];
 
-//FIXME: .bind x3
-
 // Получить свои сессии
-sessionsRouter.get("/", adminAuth, sessionService.getMySessions.bind(sessionService));
+sessionsRouter.get("/", adminAuth, sessionService.getMySessions);
 
 // Завершить конкретную сессию
-sessionsRouter.delete("/:id", adminAuth, sessionService.terminateSession.bind(sessionService));
+sessionsRouter.delete("/:id", adminAuth, sessionService.terminateSession);
 
 // Завершить все сессии кроме текущей
-sessionsRouter.delete("/", adminAuth, sessionService.terminateAllOtherSessions.bind(sessionService));
+sessionsRouter.delete("/", adminAuth, sessionService.terminateAllOtherSessions);
