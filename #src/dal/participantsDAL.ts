@@ -453,4 +453,12 @@ export class ParticipantsDAL extends BaseDAL {
         const result = await query.first();
         return result || null;
     }
+
+    /**
+     * Получить всех активных участников проекта (для предзагрузки)
+     */
+    async getActiveByProject(projectId: number): Promise<Participant[]> {
+        return this.db<Participant>(this.tableName)
+            .where({ project_id: projectId, is_delete: false });
+    }
 }

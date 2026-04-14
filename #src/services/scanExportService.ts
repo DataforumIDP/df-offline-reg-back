@@ -68,6 +68,36 @@ const DEFAULT_SESSION_MINUTES = 45;
  */
 class ScanExportService {
     /**
+     * Загружает всех участников проекта и строит Map: code -> Participant
+     * для всех полей типа 'code'. Один SQL-запрос вместо N.
+     */
+    private async buildCodeToParticipantMap(
+        projectId: number,
+        codeFieldKeys: string[]
+    ): Promise<Map<string, Participant>> {
+        const codeMap = new Map<string, Participant>();
+        if (codeFieldKeys.length === 0) return codeMap;
+
+        // Один запрос — все участники проекта
+        const [participants] = await wrap(
+            participantDAL.getActiveByProject(projectId)
+        );
+
+        if (!participants) return codeMap;
+
+        for (const p of participants) {
+            for (const key of codeFieldKeys) {
+                const val = p.data?.[key];
+                if (val !== undefined && val !== null && val !== '') {
+                    codeMap.set(String(val), p);
+                }
+            }
+        }
+
+        return codeMap;
+    }
+
+    /**
      * POST /projects/:projectId/scans/excel
      * Экспорт статистики сканирований в Excel
      */
@@ -158,16 +188,8 @@ class ScanExportService {
             logsByUser.set(log.user_code, userLogs);
         }
 
-        // 6. Получаем участников по кодам
-        const userCodes = Array.from(logsByUser.keys());
-        const participantMap = new Map<string, Participant>();
-
-        for (const code of userCodes) {
-            const [participant] = await wrap(participantDAL.findByCode(projectId, code, codeFieldKeys));
-            if (participant) {
-                participantMap.set(code, participant);
-            }
-        }
+        // 6. Получаем участников — один запрос вместо N
+        const participantMap = await this.buildCodeToParticipantMap(projectId, codeFieldKeys);
 
         // 7. Получаем количество печатей если нужно
         const printCounts = new Map<number, number>();
@@ -832,7 +854,11 @@ class ScanExportService {
         // Получаем ключи телефонных полей для форматирования
         const phoneFieldKeys = getPhoneFieldKeys(fields as any);
 
-        // 3. Получаем количество печатей если нужно
+        // 3. Предзагрузка всех участников проекта (один SQL-запрос вместо N*M)
+        const globalParticipantMap = await this.buildCodeToParticipantMap(projectId, codeFieldKeys);
+        console.log('[MassExport] Предзагрузка участников:', globalParticipantMap.size, 'кодов');
+
+        // 4. Получаем количество печатей если нужно
         const printCounts = new Map<number, number>();
         if (addPrints) {
             const [counts, countsErr] = await wrap(participantLogsDAL.getPrintCountsByParticipant(projectId));
@@ -843,7 +869,7 @@ class ScanExportService {
             }
         }
 
-        // 4. Обрабатываем каждый item и формируем Excel
+        // 5. Обрабатываем каждый item и формируем Excel
         const workbook = new Excel.Workbook();
         const scanMode = project.scanMode || project.scan_mode || 'base';
 
@@ -940,23 +966,12 @@ class ScanExportService {
                 logsByUser.set(log.user_code, userLogs);
             }
 
-            // Получаем участников
-            const userCodes = Array.from(logsByUser.keys());
-            const participantMap = new Map<string, Participant>();
-
-            for (const code of userCodes) {
-                const [participant] = await wrap(participantDAL.findByCode(projectId, code, codeFieldKeys));
-                if (participant) {
-                    participantMap.set(code, participant);
-                }
-            }
-
             // Вычисляем сессии
             const zoneMap = new Map<number, Zone>([[zone.id, zone]]);
             const userScanData: UserScanData[] = [];
 
             for (const [userCode, userLogs] of logsByUser) {
-                const participant = participantMap.get(userCode) || null;
+                const participant = globalParticipantMap.get(userCode) || null;
                 let sessions = this.calculateSessions(
                     userLogs,
                     zoneMap,
