@@ -34,6 +34,7 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
         "colorRow",
         "rulesField",
         "scanMode",
+        "journalEnabled"
     ]);
 
     // Преобразуем даты в Date объекты если они есть
