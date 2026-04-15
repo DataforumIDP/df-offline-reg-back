@@ -137,3 +137,13 @@ scannerRouter.post(
     scannerGetProjectMiddlewares,
     scannerService.journalToggle.bind(scannerService)
 );
+
+/**
+ * GET /scanner/journal
+ * Получить все записи журнала для проекта текущего сканера
+ */
+scannerRouter.get(
+    "/journal",
+    scannerGetProjectMiddlewares,
+    scannerService.journalGetRecords.bind(scannerService)
+);

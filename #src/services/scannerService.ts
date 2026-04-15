@@ -616,6 +616,33 @@ export class ScannerService {
             record: DeviceJournalHelper.toJSON(record),
         });
     }
+
+    /**
+     * GET /scanner/journal
+     * Получить все записи журнала для проекта текущего сканера
+     */
+    async journalGetRecords(
+        req: Request & { project?: Project; scanner?: any },
+        res: Response
+    ) {
+        const project = req.project!;
+
+        const { deviceJournalDAL } = await import("../dal/deviceJournalDAL");
+        const { DeviceJournalHelper } = await import("../models/deviceJournal");
+
+        const [result, err] = await wrap(
+            deviceJournalDAL.getAll(project.id, {})
+        );
+
+        if (err || !result) {
+            return dbError(res, "#JOURNAL_LIST1");
+        }
+
+        res.json({
+            records: result.records.map(DeviceJournalHelper.toJSON),
+            totalRecords: result.totalRecords,
+        });
+    }
 }
 
 export const scannerService = new ScannerService();
