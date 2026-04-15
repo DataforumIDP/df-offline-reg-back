@@ -92,3 +92,48 @@ scannerRouter.post(
     scannerMarkMiddlewares,
     scannerService.markParticipant.bind(scannerService)
 );
+
+// ===== Роуты журнала устройств для сканера =====
+
+/**
+ * POST /scanner/journal/checkout
+ * Выдать устройство участнику
+ * Body: { userCode: string, userName?: string, participantId?: number }
+ */
+scannerRouter.post(
+    "/journal/checkout",
+    scannerGetProjectMiddlewares,
+    scannerService.journalCheckout.bind(scannerService)
+);
+
+/**
+ * POST /scanner/journal/checkin
+ * Сдать устройство (по коду участника)
+ * Body: { userCode: string }
+ */
+scannerRouter.post(
+    "/journal/checkin",
+    scannerGetProjectMiddlewares,
+    scannerService.journalCheckin.bind(scannerService)
+);
+
+/**
+ * GET /scanner/journal/status/:userCode
+ * Проверить статус участника (есть ли активная выдача)
+ */
+scannerRouter.get(
+    "/journal/status/:userCode",
+    scannerGetProjectMiddlewares,
+    scannerService.journalStatus.bind(scannerService)
+);
+
+/**
+ * POST /scanner/journal/toggle
+ * Переключить состояние: если нет активной записи - checkout, если есть - checkin
+ * Body: { userCode: string, userName?: string, participantId?: number }
+ */
+scannerRouter.post(
+    "/journal/toggle",
+    scannerGetProjectMiddlewares,
+    scannerService.journalToggle.bind(scannerService)
+);

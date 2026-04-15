@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+﻿import { Router, Request, Response } from "express";
 import { ProjectService } from "../services/projectService";
 import { ProjectFieldService } from "../services/projectFieldService";
 import { ParticipantService, ParticipantCodeService } from "../services/participantService";
@@ -7,6 +7,12 @@ import { scanExportService } from "../services/scanExportService";
 import { printTemplateService } from "../services/printTemplateService";
 import { webhookService } from "../services/webhookService";
 import { scannersDAL } from "../dal/scannersDAL";
+import { deviceJournalService } from "../services/deviceJournalService";
+import {
+    getJournalMiddlewares,
+    getJournalStatsMiddlewares,
+    returnJournalMiddlewares,
+} from "../middlewares/projects/journalMiddlewares";
 import { ScannerHelper } from "../models/scanners";
 import { wrap } from "../utils/wrap";
 import { dbError } from "../utils/errors";
@@ -52,7 +58,7 @@ const projectField = new ProjectFieldService();
 const participant = new ParticipantService();
 const participantCode = new ParticipantCodeService();
 
-// ===== Роуты проектов =====
+// ===== Р РѕСѓС‚С‹ РїСЂРѕРµРєС‚РѕРІ =====
 projectsRouter.post("/", createMiddlewares, project.create);
 projectsRouter.patch("/:id", updateMiddlewares, project.update);
 projectsRouter.get("/", getMiddlewares, project.get);
@@ -60,40 +66,40 @@ projectsRouter.get("/:id/users", getMiddlewares, project.getUsers);
 projectsRouter.get("/:slugOrId", getOneMiddlewares, project.getOne);
 projectsRouter.delete("/:id", deleteMiddlewares, project.delete);
 
-// ===== Роуты схемы полей проекта =====
+// ===== Р РѕСѓС‚С‹ СЃС…РµРјС‹ РїРѕР»РµР№ РїСЂРѕРµРєС‚Р° =====
 projectsRouter.get("/:projectId/scheme", getSchemeMiddlewares, projectField.getScheme);
 projectsRouter.post("/:projectId/scheme", createFieldMiddlewares, projectField.createField);
 projectsRouter.put("/:projectId/scheme/:fieldId", updateFieldMiddlewares, projectField.updateField);
 projectsRouter.delete("/:projectId/scheme/:fieldId", deleteFieldMiddlewares, projectField.deleteField);
 
-// ===== Роуты шаблонов печати проекта =====
+// ===== Р РѕСѓС‚С‹ С€Р°Р±Р»РѕРЅРѕРІ РїРµС‡Р°С‚Рё РїСЂРѕРµРєС‚Р° =====
 projectsRouter.get("/:projectId/print-template", getProjectTemplateMiddlewares, printTemplateService.getByProject);
 projectsRouter.post("/:projectId/print-template", assignTemplateMiddlewares, printTemplateService.assignToProject);
 projectsRouter.delete("/:projectId/print-template", removeTemplateMiddlewares, printTemplateService.removeFromProject);
 
-// ===== Роуты webhooks проекта =====
+// ===== Р РѕСѓС‚С‹ webhooks РїСЂРѕРµРєС‚Р° =====
 projectsRouter.get("/:projectId/webhooks", getSchemeMiddlewares, webhookService.getByProject);
 
-// ===== Поиск участника по коду =====
+// ===== РџРѕРёСЃРє СѓС‡Р°СЃС‚РЅРёРєР° РїРѕ РєРѕРґСѓ =====
 projectsRouter.get("/:projectId/code/:code", findByCodeMiddlewares, participantCode.findByCode);
 
-// ===== Роуты логов участников (должны быть ДО роутов с :participantId) =====
+// ===== Р РѕСѓС‚С‹ Р»РѕРіРѕРІ СѓС‡Р°СЃС‚РЅРёРєРѕРІ (РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ Р”Рћ СЂРѕСѓС‚РѕРІ СЃ :participantId) =====
 projectsRouter.get("/:projectId/participants/log/stats", getLogsMiddlewares, participantLogService.getStats);
 projectsRouter.get("/:projectId/participants/log", getLogsMiddlewares, participantLogService.getAll);
 projectsRouter.get("/:projectId/operator/:userId", getLogsMiddlewares, participantLogService.getOperatorStats);
 
-// ===== Excel и массовые операции (должны быть ДО роутов с :participantId) =====
+// ===== Excel Рё РјР°СЃСЃРѕРІС‹Рµ РѕРїРµСЂР°С†РёРё (РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ Р”Рћ СЂРѕСѓС‚РѕРІ СЃ :participantId) =====
 projectsRouter.get("/:projectId/participants/excel", excelTemplateMiddlewares, participant.getExcelTemplate);
 projectsRouter.post("/:projectId/participants/excel", excelImportMiddlewares, participant.importFromExcel);
 projectsRouter.get("/:projectId/participants/export", excelExportMiddlewares, participant.exportToExcel);
 projectsRouter.delete("/:projectId/participants", clearParticipantsMiddlewares, participant.clearAll);
 
-// ===== Очистка отметок печати и логов сканеров =====
+// ===== РћС‡РёСЃС‚РєР° РѕС‚РјРµС‚РѕРє РїРµС‡Р°С‚Рё Рё Р»РѕРіРѕРІ СЃРєР°РЅРµСЂРѕРІ =====
 projectsRouter.delete("/:projectId/prints", clearPrintMarksMiddlewares, participantLogService.clearPrintMarks);
 projectsRouter.delete("/:projectId/scanners/logs", clearScannerLogsMiddlewares, participantLogService.clearScannerLogs);
 
-// ===== Получение списка устройств проекта =====
-//FIXME: вынести логику
+// ===== РџРѕР»СѓС‡РµРЅРёРµ СЃРїРёСЃРєР° СѓСЃС‚СЂРѕР№СЃС‚РІ РїСЂРѕРµРєС‚Р° =====
+//FIXME: РІС‹РЅРµСЃС‚Рё Р»РѕРіРёРєСѓ
 projectsRouter.get("/:projectId/devices", getSchemeMiddlewares, async (req: Request, res: Response) => {
     const projectId = Number(req.params.projectId);
     
@@ -111,12 +117,12 @@ projectsRouter.get("/:projectId/devices", getSchemeMiddlewares, async (req: Requ
     );
 });
 
-// ===== Экспорт статистики сканирований =====
+// ===== Р­РєСЃРїРѕСЂС‚ СЃС‚Р°С‚РёСЃС‚РёРєРё СЃРєР°РЅРёСЂРѕРІР°РЅРёР№ =====
 //FIXME: .bind x2
 projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExportService.exportScansToExcel.bind(scanExportService));
 projectsRouter.post("/:projectId/scanners/logs/mass", exportMassScansMiddlewares, scanExportService.exportMassScansToExcel.bind(scanExportService));
 
-// ===== Роуты участников проекта =====
+// ===== Р РѕСѓС‚С‹ СѓС‡Р°СЃС‚РЅРёРєРѕРІ РїСЂРѕРµРєС‚Р° =====
 projectsRouter.get("/:projectId/participants", getParticipantsMiddlewares, participant.getAll);
 projectsRouter.get("/:projectId/participants/:participantId", getParticipantMiddlewares, participant.getOne);
 projectsRouter.get("/:projectId/participants/:participantId/log", getParticipantMiddlewares, participantLogService.getByParticipant);
@@ -125,3 +131,21 @@ projectsRouter.post("/:projectId/participants", createParticipantMiddlewares, pa
 projectsRouter.post("/:projectId/participants/:participantId/print", printParticipantMiddlewares, participant.print);
 projectsRouter.put("/:projectId/participants/:participantId", updateParticipantMiddlewares, participant.update);
 projectsRouter.delete("/:projectId/participants/:participantId", deleteParticipantMiddlewares, participant.delete);
+
+
+// ===== Роуты журнала устройств =====
+projectsRouter.get("/:projectId/journal", getJournalMiddlewares, deviceJournalService.getAll.bind(deviceJournalService));
+projectsRouter.get("/:projectId/journal/stats", getJournalStatsMiddlewares, deviceJournalService.getStats.bind(deviceJournalService));
+projectsRouter.post("/:projectId/journal/:recordId/return", returnJournalMiddlewares, deviceJournalService.manualReturn.bind(deviceJournalService));
+
+// ===== Роуты журнала устройств =====
+import { deviceJournalService } from "../services/deviceJournalService";
+import {
+    getJournalMiddlewares,
+    getJournalStatsMiddlewares,
+    returnJournalMiddlewares,
+} from "../middlewares/projects/journalMiddlewares";
+
+projectsRouter.get("/:projectId/journal", getJournalMiddlewares, deviceJournalService.getAll.bind(deviceJournalService));
+projectsRouter.get("/:projectId/journal/stats", getJournalStatsMiddlewares, deviceJournalService.getStats.bind(deviceJournalService));
+projectsRouter.post("/:projectId/journal/:recordId/return", returnJournalMiddlewares, deviceJournalService.manualReturn.bind(deviceJournalService));

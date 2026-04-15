@@ -1,4 +1,4 @@
-export type ScanMode = 'base' | 'direction' | 'view';
+﻿export type ScanMode = 'base' | 'direction' | 'view';
 
 export interface Project {
     id: number;
@@ -8,11 +8,13 @@ export interface Project {
     dateStart: Date;
     dateEnd: Date;
     isOperatorEditable: boolean;
-    colorRow: boolean; // Красить всю строку участника вместо только ячейки типа
-    rulesField: string | null; // Поле (список) для проверки доступа в зоны
-    rules_field?: string | null; // snake_case версия из БД
-    scanMode: ScanMode; // Режим сканирования
-    scan_mode?: ScanMode; // snake_case версия из БД
+    colorRow: boolean;
+    rulesField: string | null;
+    rules_field?: string | null;
+    scanMode: ScanMode;
+    scan_mode?: ScanMode;
+    journalEnabled: boolean;
+    journal_enabled?: boolean;
     isDelete: boolean;
     createdAt: Date;
     updatedAt: Date;
@@ -31,6 +33,7 @@ export class ProjectHelper {
             colorRow: project.colorRow ?? false,
             rulesField: project.rulesField ?? project.rules_field ?? null,
             scanMode: project.scanMode ?? project.scan_mode ?? 'base',
+            journalEnabled: project.journalEnabled ?? project.journal_enabled ?? false,
         };
     }
 
