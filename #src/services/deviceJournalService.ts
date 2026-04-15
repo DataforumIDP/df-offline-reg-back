@@ -1,17 +1,17 @@
-п»їimport { Request, Response } from "express";
+import { Request, Response } from "express";
 import { deviceJournalDAL, JournalQuery } from "../dal/deviceJournalDAL";
 import { DeviceJournalHelper } from "../models/deviceJournal";
 import { dbError } from "../utils/errors";
 import { wrap } from "../utils/wrap";
-import { response200, response201 } from "../utils/responses";
+import { response201 } from "../utils/responses";
 
 /**
- * РЎРµСЂРІРёСЃ Р¶СѓСЂРЅР°Р»Р° СѓСЃС‚СЂРѕР№СЃС‚РІ (Р°РґРјРёРЅ-РїР°РЅРµР»СЊ)
+ * Сервис журнала устройств (админ-панель)
  */
 export class DeviceJournalService {
     /**
      * GET /projects/:projectId/journal
-     * РџРѕР»СѓС‡РёС‚СЊ Р·Р°РїРёСЃРё Р¶СѓСЂРЅР°Р»Р° СЃ РїР°РіРёРЅР°С†РёРµР№ Рё С„РёР»СЊС‚СЂР°РјРё
+     * Получить записи журнала с пагинацией и фильтрами
      */
     async getAll(req: Request, res: Response) {
         const projectId = Number(req.params.projectId);
@@ -31,7 +31,7 @@ export class DeviceJournalService {
             return dbError(res, "#JOURNAL_GET1");
         }
 
-        response200(res, {
+        response201(res, {
             records: result.records.map(DeviceJournalHelper.toJSON),
             totalRecords: result.totalRecords,
             totalPages: result.totalPages,
@@ -42,7 +42,7 @@ export class DeviceJournalService {
 
     /**
      * GET /projects/:projectId/journal/stats
-     * РџРѕР»СѓС‡РёС‚СЊ СЃС‚Р°С‚РёСЃС‚РёРєСѓ Р¶СѓСЂРЅР°Р»Р°
+     * Получить статистику журнала
      */
     async getStats(req: Request, res: Response) {
         const projectId = Number(req.params.projectId);
@@ -53,12 +53,12 @@ export class DeviceJournalService {
             return dbError(res, "#JOURNAL_STATS1");
         }
 
-        response200(res, stats);
+        response201(res, stats);
     }
 
     /**
      * POST /projects/:projectId/journal/:recordId/return
-     * Р СѓС‡РЅРѕР№ РІРѕР·РІСЂР°С‚ СѓСЃС‚СЂРѕР№СЃС‚РІР° С‡РµСЂРµР· Р°РґРјРёРЅРєСѓ
+     * Ручной возврат устройства через админку
      */
     async manualReturn(req: Request, res: Response) {
         const recordId = Number(req.params.recordId);
@@ -71,13 +71,13 @@ export class DeviceJournalService {
 
         if (!record) {
             return res.status(404).json({
-                error: "Р—Р°РїРёСЃСЊ РЅРµ РЅР°Р№РґРµРЅР° РёР»Рё СѓР¶Рµ РІРѕР·РІСЂР°С‰РµРЅР°",
+                error: "Запись не найдена или уже возвращена",
                 code: "NOT_FOUND",
             });
         }
 
-        response200(res, {
-            message: "РЈСЃС‚СЂРѕР№СЃС‚РІРѕ РѕС‚РјРµС‡РµРЅРѕ РєР°Рє СЃРґР°РЅРЅРѕРµ",
+        response201(res, {
+            message: "Устройство отмечено как сданное",
             record: DeviceJournalHelper.toJSON(record),
         });
     }

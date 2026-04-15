@@ -117,10 +117,8 @@ projectsRouter.get("/:projectId/devices", getSchemeMiddlewares, async (req: Requ
     );
 });
 
-// ===== Р­РєСЃРїРѕСЂС‚ СЃС‚Р°С‚РёСЃС‚РёРєРё СЃРєР°РЅРёСЂРѕРІР°РЅРёР№ =====
-//FIXME: .bind x2
-projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExportService.exportScansToExcel.bind(scanExportService));
-projectsRouter.post("/:projectId/scanners/logs/mass", exportMassScansMiddlewares, scanExportService.exportMassScansToExcel.bind(scanExportService));
+projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExportService.exportScansToExcel);
+projectsRouter.post("/:projectId/scanners/logs/mass", exportMassScansMiddlewares, scanExportService.exportMassScansToExcel);
 
 // ===== Р РѕСѓС‚С‹ СѓС‡Р°СЃС‚РЅРёРєРѕРІ РїСЂРѕРµРєС‚Р° =====
 projectsRouter.get("/:projectId/participants", getParticipantsMiddlewares, participant.getAll);
@@ -134,18 +132,6 @@ projectsRouter.delete("/:projectId/participants/:participantId", deleteParticipa
 
 
 // ===== Роуты журнала устройств =====
-projectsRouter.get("/:projectId/journal", getJournalMiddlewares, deviceJournalService.getAll.bind(deviceJournalService));
-projectsRouter.get("/:projectId/journal/stats", getJournalStatsMiddlewares, deviceJournalService.getStats.bind(deviceJournalService));
-projectsRouter.post("/:projectId/journal/:recordId/return", returnJournalMiddlewares, deviceJournalService.manualReturn.bind(deviceJournalService));
-
-// ===== Роуты журнала устройств =====
-import { deviceJournalService } from "../services/deviceJournalService";
-import {
-    getJournalMiddlewares,
-    getJournalStatsMiddlewares,
-    returnJournalMiddlewares,
-} from "../middlewares/projects/journalMiddlewares";
-
-projectsRouter.get("/:projectId/journal", getJournalMiddlewares, deviceJournalService.getAll.bind(deviceJournalService));
-projectsRouter.get("/:projectId/journal/stats", getJournalStatsMiddlewares, deviceJournalService.getStats.bind(deviceJournalService));
-projectsRouter.post("/:projectId/journal/:recordId/return", returnJournalMiddlewares, deviceJournalService.manualReturn.bind(deviceJournalService));
+projectsRouter.get("/:projectId/journal", getJournalMiddlewares, deviceJournalService.getAll);
+projectsRouter.get("/:projectId/journal/stats", getJournalStatsMiddlewares, deviceJournalService.getStats);
+projectsRouter.post("/:projectId/journal/:recordId/return", returnJournalMiddlewares, deviceJournalService.manualReturn);
