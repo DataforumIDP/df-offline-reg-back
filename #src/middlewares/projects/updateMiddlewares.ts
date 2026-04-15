@@ -53,6 +53,12 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
         delete data.scanMode;
     }
 
+    // Преобразуем journalEnabled в journal_enabled для БД
+    if ('journalEnabled' in data) {
+        data.journal_enabled = data.journalEnabled;
+        delete data.journalEnabled;
+    }
+
     req.body = data;
     next();
 };
