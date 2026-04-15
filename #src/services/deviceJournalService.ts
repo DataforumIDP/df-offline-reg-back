@@ -6,12 +6,12 @@ import { wrap } from "../utils/wrap";
 import { response201 } from "../utils/responses";
 
 /**
- * Сервис журнала устройств (админ-панель)
+ * пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ (пїЅпїЅпїЅпїЅпїЅ-пїЅпїЅпїЅпїЅпїЅпїЅ)
  */
 export class DeviceJournalService {
     /**
      * GET /projects/:projectId/journal
-     * Получить записи журнала с пагинацией и фильтрами
+     * пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
      */
     async getAll(req: Request, res: Response) {
         const projectId = Number(req.params.projectId);
@@ -42,7 +42,7 @@ export class DeviceJournalService {
 
     /**
      * GET /projects/:projectId/journal/stats
-     * Получить статистику журнала
+     * пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
      */
     async getStats(req: Request, res: Response) {
         const projectId = Number(req.params.projectId);
@@ -58,7 +58,7 @@ export class DeviceJournalService {
 
     /**
      * POST /projects/:projectId/journal/:recordId/return
-     * Ручной возврат устройства через админку
+     * пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
      */
     async manualReturn(req: Request, res: Response) {
         const recordId = Number(req.params.recordId);
@@ -71,13 +71,13 @@ export class DeviceJournalService {
 
         if (!record) {
             return res.status(404).json({
-                error: "Запись не найдена или уже возвращена",
+                error: "пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ",
                 code: "NOT_FOUND",
             });
         }
 
         response201(res, {
-            message: "Устройство отмечено как сданное",
+            message: "пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ",
             record: DeviceJournalHelper.toJSON(record),
         });
     }
