@@ -625,7 +625,10 @@ export class ScannerService {
         req: Request & { project?: Project; scanner?: any },
         res: Response
     ) {
-        const project = req.project!;
+        if (!req.scannerAuth) {
+            return res.status(401).json({ error: "Не авторизован" });
+        }
+        const project = req.scannerAuth.project;
 
         const { deviceJournalDAL } = await import("../dal/deviceJournalDAL");
         const { DeviceJournalHelper } = await import("../models/deviceJournal");
