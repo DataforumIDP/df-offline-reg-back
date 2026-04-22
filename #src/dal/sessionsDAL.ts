@@ -15,6 +15,7 @@ export class SessionsDAL extends BaseDAL {
         ip_address?: string | null;
         user_agent?: string | null;
         device_name?: string | null;
+        device_id?: string | null;
         expires_at: Date;
     }): Promise<Session> {
         const [session] = await this.db(this.tableName)
@@ -24,12 +25,44 @@ export class SessionsDAL extends BaseDAL {
                 ip_address: data.ip_address || null,
                 user_agent: data.user_agent || null,
                 device_name: data.device_name || null,
+                device_id: data.device_id || null,
                 is_active: true,
                 expires_at: data.expires_at,
                 last_activity: new Date(),
             })
             .returning('*');
         
+        return session;
+    }
+
+    /**
+     * Находит активную сессию по device_id и account_id.
+     * Используется для переиспользования сессии при повторном входе с того же устройства.
+     */
+    async findActiveByDeviceAndAccount(deviceId: string, accountId: number): Promise<Session | null> {
+        const session = await this.db(this.tableName)
+            .where({ device_id: deviceId, account_id: accountId, is_active: true })
+            .where('expires_at', '>', new Date())
+            .first();
+
+        return session || null;
+    }
+
+    /**
+     * Обновляет token_hash и сбрасывает срок действия существующей сессии.
+     * Используется при переиспользовании сессии устройства.
+     */
+    async renewSession(sessionId: number, tokenHash: string, expiresAt: Date): Promise<Session> {
+        const [session] = await this.db(this.tableName)
+            .where({ id: sessionId })
+            .update({
+                token_hash: tokenHash,
+                expires_at: expiresAt,
+                last_activity: new Date(),
+                is_active: true,
+            })
+            .returning('*');
+
         return session;
     }
 

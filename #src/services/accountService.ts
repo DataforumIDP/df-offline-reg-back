@@ -70,18 +70,32 @@ export class AccountService {
                 const ipAddress = SessionHelper.getIpAddress(req as Request);
                 const userAgent = req.headers["user-agent"] || "";
                 const deviceName = SessionHelper.parseDeviceName(userAgent);
+                const deviceId = (req.headers["x-device-id"] as string | undefined)?.slice(0, 64) || null;
 
                 // 60 дней (как у refresh token)
                 const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
 
-                const session = await sessionsDAL.create({
-                    account_id: account.id,
-                    token_hash: tokenHash,
-                    ip_address: ipAddress,
-                    user_agent: userAgent,
-                    device_name: deviceName,
-                    expires_at: expiresAt,
-                });
+                let session;
+
+                // Если пришёл deviceId — переиспользуем сессию этого устройства
+                if (deviceId) {
+                    const existing = await sessionsDAL.findActiveByDeviceAndAccount(deviceId, account.id);
+                    if (existing) {
+                        session = await sessionsDAL.renewSession(existing.id, tokenHash, expiresAt);
+                    }
+                }
+
+                if (!session) {
+                    session = await sessionsDAL.create({
+                        account_id: account.id,
+                        token_hash: tokenHash,
+                        ip_address: ipAddress,
+                        user_agent: userAgent,
+                        device_name: deviceName,
+                        device_id: deviceId,
+                        expires_at: expiresAt,
+                    });
+                }
 
                 accessToken = JWT.createAccessToken(payload, {
                     sessionId: session.id,

@@ -34,6 +34,7 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
         "colorRow",
         "rulesField",
         "scanMode",
+        "scanAction",
         "journalEnabled"
     ]);
 
@@ -57,6 +58,12 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
     if ('journalEnabled' in data) {
         data.journal_enabled = data.journalEnabled;
         delete data.journalEnabled;
+    }
+
+    // Преобразуем scanAction в scan_action для БД
+    if ('scanAction' in data) {
+        data.scan_action = data.scanAction ? JSON.stringify(data.scanAction) : null;
+        delete data.scanAction;
     }
 
     req.body = data;

@@ -1,5 +1,13 @@
 ﻿export type ScanMode = 'base' | 'direction' | 'view';
 
+export type ScanActionType = 'none' | 'print' | 'change';
+
+export interface ScanAction {
+    type: ScanActionType;
+    fieldKey?: string;
+    value?: string | boolean;
+}
+
 export interface Project {
     id: number;
     title: string;
@@ -13,6 +21,8 @@ export interface Project {
     rules_field?: string | null;
     scanMode: ScanMode;
     scan_mode?: ScanMode;
+    scanAction: ScanAction | null;
+    scan_action?: ScanAction | null;
     journalEnabled: boolean;
     journal_enabled?: boolean;
     isDelete: boolean;
@@ -33,6 +43,7 @@ export class ProjectHelper {
             colorRow: project.colorRow ?? false,
             rulesField: project.rulesField ?? project.rules_field ?? null,
             scanMode: project.scanMode ?? project.scan_mode ?? 'base',
+            scanAction: project.scanAction ?? project.scan_action ?? null,
             journalEnabled: project.journalEnabled ?? project.journal_enabled ?? false,
         };
     }

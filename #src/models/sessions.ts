@@ -8,6 +8,7 @@ export interface Session {
     ip_address: string | null;
     user_agent: string | null;
     device_name: string | null;
+    device_id: string | null;
     is_active: boolean;
     last_activity: Date;
     expires_at: Date;
