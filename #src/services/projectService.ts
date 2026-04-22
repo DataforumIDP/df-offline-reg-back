@@ -155,18 +155,70 @@ export class ProjectService {
         res: Response
     ) {
         const { id } = req.params;
-        // Выполняем жесткое удаление (hard delete)
-        const [result, err] = await wrap(ProjectDAL.hardDelete([Number(id)]), !!1);
+        const projectId = Number(id);
 
-        console.log(err, err === null);
-        
-        if (err !== null) {
-            return dbError(res, "#DelProj1");
+        // Проверяем, что проект существует
+        const project = await db('projects').where({ id: projectId }).first();
+        if (!project) {
+            return res.status(404).json({ error: 'Проект не найден' });
         }
 
-        // result — количество удалённых строк
-        if (!result || result === 0) {
-            return res.status(404).json({ error: 'Проект не найден' });
+        // Явное каскадное удаление всех данных проекта
+        // (FK-constraints также имеют ON DELETE CASCADE, но удаляем явно для прозрачности)
+        try {
+            await db.transaction(async (trx) => {
+                // 1. Журнал устройств
+                await trx('device_journal').where({ project_id: projectId }).del();
+
+                // 2. Логи сканеров
+                await trx('scanner_logs').where({ project_id: projectId }).del();
+
+                // 3. Сканеры
+                await trx('scanners').where({ project_id: projectId }).del();
+
+                // 4. Ключи авторизации сканеров
+                await trx('project_auth').where({ project_id: projectId }).del();
+
+                // 5. Логи вебхуков (через webhook_id)
+                const webhookIds = await trx('webhooks')
+                    .where({ project_id: projectId })
+                    .pluck('id');
+                if (webhookIds.length > 0) {
+                    await trx('webhook_logs').whereIn('webhook_id', webhookIds).del();
+                }
+
+                // 6. Вебхуки
+                await trx('webhooks').where({ project_id: projectId }).del();
+
+                // 7. Правила зон (через zone_id)
+                const zoneIds = await trx('zones')
+                    .where({ project_id: projectId })
+                    .pluck('id');
+                if (zoneIds.length > 0) {
+                    await trx('zone_rules').whereIn('zone_id', zoneIds).del();
+                }
+
+                // 8. Зоны
+                await trx('zones').where({ project_id: projectId }).del();
+
+                // 9. Логи участников (журнал печати, сканирования, изменений)
+                await trx('participant_logs').where({ project_id: projectId }).del();
+
+                // 10. Участники
+                await trx('participants').where({ project_id: projectId }).del();
+
+                // 11. Привязка шаблона печати
+                await trx('project_print_templates').where({ project_id: projectId }).del();
+
+                // 12. Схема проекта (поля)
+                await trx('project_fields').where({ project_id: projectId }).del();
+
+                // 13. Сам проект
+                await trx('projects').where({ id: projectId }).del();
+            });
+        } catch (err) {
+            console.error('[delete project]', err);
+            return dbError(res, '#DelProj1');
         }
 
         response204(res);
