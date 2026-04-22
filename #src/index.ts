@@ -12,6 +12,7 @@ import { zonesRouter } from "./routes/zonesRouter";
 import { scannerRouter } from "./routes/scannerRouter";
 import { sessionsRouter } from "./routes/sessionsRouter";
 import { qrAuthRouter } from "./routes/qrAuthRouter";
+import { cloudFontsRouter } from "./routes/cloudFontsRouter";
 import { initQrAuthSocket } from "./services/qrAuthService";
 
 const app = express();
@@ -40,6 +41,7 @@ app.use("/zones", zonesRouter);
 app.use("/scanner", scannerRouter);
 app.use("/sessions", sessionsRouter);
 app.use("/qr-auth", qrAuthRouter);
+app.use("/cloud-fonts", cloudFontsRouter);
 
 app.use(_404Middleware);
 
