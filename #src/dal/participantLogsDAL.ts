@@ -135,6 +135,25 @@ export class ParticipantLogsDAL extends BaseDAL {
     }
 
     /**
+     * Получить время первой печати по каждому участнику
+     */
+    async getFirstPrintByParticipant(projectId: number): Promise<Map<number, Date>> {
+        const result = await this.db<ParticipantLog>(this.tableName)
+            .where({ project_id: projectId, action: 'PRINT' })
+            .whereNotNull('participant_id')
+            .select('participant_id')
+            .min('created_at as first_print_at')
+            .groupBy('participant_id');
+
+        const map = new Map<number, Date>();
+        for (const row of result) {
+            map.set(Number(row.participant_id), new Date((row as any).first_print_at));
+        }
+        return map;
+    }
+
+
+    /**
      * Получить все логи проекта без пагинации
      */
     async getAllByProjectId(

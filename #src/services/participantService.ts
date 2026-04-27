@@ -465,6 +465,7 @@ export class ParticipantService {
     async exportToExcel(req: Request, res: Response) {
         const projectId = Number(req.params.projectId);
         const includePrints = req.query.includePrints === 'true';
+        const includeFirstPrint = req.query.includeFirstPrint === 'true';
 
         // Получаем схему проекта
         const [fields] = await wrap(fieldDAL.getByProjectId(projectId));
@@ -487,6 +488,15 @@ export class ParticipantService {
             }
         }
 
+        // Получаем время первой печати если нужно
+        let firstPrintTimes: Map<number, Date> | null = null;
+        if (includeFirstPrint) {
+            const [times] = await wrap(participantLogsDAL.getFirstPrintByParticipant(projectId));
+            if (times) {
+                firstPrintTimes = times;
+            }
+        }
+
         const workbook = new Excel.Workbook();
         const worksheet = workbook.addWorksheet("Участники");
 
@@ -500,6 +510,7 @@ export class ParticipantService {
             })),
             { header: "Дата создания", key: "_created_at", width: 20 },
             ...(includePrints ? [{ header: "Печатей", key: "_print_count", width: 10 }] : []),
+            ...(includeFirstPrint ? [{ header: "Первая печать", key: "_first_print_at", width: 22 }] : []),
         ];
         worksheet.columns = columns;
 
@@ -530,6 +541,10 @@ export class ParticipantService {
             if (includePrints && printCounts) {
                 row._print_count = printCounts.get(p.id) || 0;
             }
+
+            if (includeFirstPrint && firstPrintTimes) {
+                row._first_print_at = firstPrintTimes.get(p.id) ?? null;
+            }
             
             return row;
         });
@@ -542,6 +557,16 @@ export class ParticipantService {
         // Добавляем строки
         for (const row of rowsData) {
             worksheet.addRow(row);
+        }
+
+        // Форматируем колонку с датой первой печати как дата-время
+        if (includeFirstPrint) {
+            const col = worksheet.getColumn('_first_print_at');
+            col.eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+                if (rowNumber > 1 && cell.value instanceof Date) {
+                    cell.numFmt = 'dd.mm.yyyy hh:mm:ss';
+                }
+            });
         }
 
         // Стилизация заголовков
