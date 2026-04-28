@@ -10,6 +10,7 @@ import { dbError } from "../utils/errors";
 import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
 import { normalizeParticipantPhones, getPhoneFieldKeys } from "../utils/phoneUtils";
+import { runScript } from "../utils/scriptRunner";
 
 const participantsDAL = new ParticipantsDAL();
 const fieldsDAL = new ProjectFieldsDAL();
@@ -74,10 +75,10 @@ export class WebhookService {
      */
     async update(req: Request, res: Response) {
         const webhook = req.webhook!;
-        const { name, isActive } = req.body;
+        const { name, isActive, preScript, postScript } = req.body;
 
         const [updated, err] = await wrap(
-            webhooksDAL.update(webhook.id, { name, isActive })
+            webhooksDAL.update(webhook.id, { name, isActive, preScript, postScript })
         );
 
         if (err || !updated) {
@@ -110,8 +111,21 @@ export class WebhookService {
      */
     async receive(req: Request, res: Response) {
         const webhook = req.webhook!;
-        const data = req.body;
+        const rawData = req.body;
         const projectId = webhook.project_id;
+
+        // ── Прескрипт: кастомная валидация/трансформация сырых данных ──
+        let data = rawData;
+        if (webhook.pre_script) {
+            try {
+                data = await runScript(webhook.pre_script, { user: rawData });
+            } catch (scriptErr: any) {
+                return res.status(400).json({
+                    success: false,
+                    error: scriptErr?.message ?? "Ошибка прескрипта",
+                });
+            }
+        }
 
         // Получаем схему полей проекта для валидации
         const [fields, fieldsErr] = await wrap(fieldsDAL.getByProjectId(projectId));
@@ -126,6 +140,11 @@ export class WebhookService {
         for (const field of fields) {
             const value = data[field.key];
             const config = field.config;
+
+            // Пропускаем скрытые поля — вебхук не может их устанавливать
+            if ((config as any).isHidden) {
+                continue;
+            }
 
             // Генерация ID для полей типа id
             if (config.type === "id") {
@@ -265,9 +284,27 @@ export class WebhookService {
             currentData: participant.data,
         });
 
+        // ── Постскрипт: кастомная обработка после сохранения ──
+        let finalData = participant.data;
+        if (webhook.post_script) {
+            try {
+                const result = await runScript(webhook.post_script, { user: participant.data });
+                // Если постскрипт вернул изменения — сохраняем их
+                const [updated] = await wrap(
+                    participantsDAL.update(participant.id, result)
+                );
+                if (updated) {
+                    finalData = result;
+                }
+            } catch (scriptErr: any) {
+                // Постскрипт не должен откатывать сохранение, только логируем
+                console.error(`[WEBHOOK POST_SCRIPT] webhook=${webhook.slug} error:`, scriptErr?.message);
+            }
+        }
+
         response201(res, {
             success: true,
-            participant: ParticipantHelper.toJSON(participant),
+            participant: ParticipantHelper.toJSON({ ...participant, data: finalData }),
         });
     }
 

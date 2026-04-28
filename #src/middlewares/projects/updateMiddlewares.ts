@@ -35,6 +35,7 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
         "rulesField",
         "scanMode",
         "scanAction",
+        "scanActionRules",
         "journalEnabled"
     ]);
 
@@ -64,6 +65,14 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
     if ('scanAction' in data) {
         data.scan_action = data.scanAction ? JSON.stringify(data.scanAction) : null;
         delete data.scanAction;
+    }
+
+    // Преобразуем scanActionRules в scan_action_rules для БД
+    if ('scanActionRules' in data) {
+        data.scan_action_rules = Array.isArray(data.scanActionRules)
+            ? data.scanActionRules
+            : null;
+        delete data.scanActionRules;
     }
 
     req.body = data;

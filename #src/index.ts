@@ -43,6 +43,16 @@ app.use("/sessions", sessionsRouter);
 app.use("/qr-auth", qrAuthRouter);
 app.use("/cloud-fonts", cloudFontsRouter);
 
+// Эндпоинт проверки работоспособности сервера
+app.get("/ping", async (_req, res) => {
+    try {
+        await db.raw("SELECT 1");
+        res.json({ status: "ok", db: "ok", ts: Date.now() });
+    } catch {
+        res.status(503).json({ status: "error", db: "unavailable", ts: Date.now() });
+    }
+});
+
 app.use(_404Middleware);
 
 const PORT = process.env.PORT || 3000;

@@ -83,6 +83,12 @@ export class WebhooksDAL {
         if (data.isActive !== undefined) {
             updateData.is_active = data.isActive;
         }
+        if (data.preScript !== undefined) {
+            (updateData as any).pre_script = data.preScript;
+        }
+        if (data.postScript !== undefined) {
+            (updateData as any).post_script = data.postScript;
+        }
 
         const [updated] = await db(this.table)
             .where({ id })

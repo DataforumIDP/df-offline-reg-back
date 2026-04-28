@@ -8,6 +8,8 @@ export interface Webhook {
     slug: string;
     name: string;
     is_active: boolean;
+    pre_script: string | null;
+    post_script: string | null;
     created_at: Date;
     updated_at: Date;
 }
@@ -34,6 +36,8 @@ export interface CreateWebhookDTO {
 export interface UpdateWebhookDTO {
     name?: string;
     isActive?: boolean;
+    preScript?: string | null;
+    postScript?: string | null;
 }
 
 export interface CreateWebhookLogDTO {
@@ -57,6 +61,8 @@ export const WebhookHelper = {
             slug: webhook.slug,
             name: webhook.name,
             isActive: webhook.is_active,
+            preScript: webhook.pre_script,
+            postScript: webhook.post_script,
             createdAt: webhook.created_at,
             updatedAt: webhook.updated_at,
         };

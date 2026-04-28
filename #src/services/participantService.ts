@@ -89,6 +89,16 @@ export class ParticipantService {
                 }
             }
 
+            // Удаляем скрытые поля если пользователь — оператор
+            const role = req.account?.role;
+            if (role !== 'admin' && role !== 'superadmin') {
+                for (const field of fields) {
+                    if ((field.config as any).isHidden) {
+                        delete data[field.key];
+                    }
+                }
+            }
+
             // Нормализуем телефонные номера
             const phoneFieldKeys = getPhoneFieldKeys(fields as any);
             const normalizedData = normalizeParticipantPhones(data, phoneFieldKeys);
@@ -130,6 +140,16 @@ export class ParticipantService {
         // Получаем схему проекта для нормализации телефонов
         const [fields] = await wrap(fieldDAL.getByProjectId(projectId));
         if (fields) {
+            // Удаляем скрытые поля если пользователь — оператор
+            const role = req.account?.role;
+            if (role !== 'admin' && role !== 'superadmin') {
+                for (const field of fields) {
+                    if ((field.config as any).isHidden) {
+                        delete data[field.key];
+                    }
+                }
+            }
+
             const phoneFieldKeys = getPhoneFieldKeys(fields as any);
             data = normalizeParticipantPhones(data, phoneFieldKeys);
         }

@@ -99,7 +99,7 @@ export class ParticipantsDAL extends BaseDAL {
         query: ParticipantsQuery
     ): Promise<[Participant[], { total: number }]> {
         const page = Math.max(1, parseInt(query.page || "1", 10));
-        const limit = Math.min(100, Math.max(1, parseInt(query.limit || "20", 10)));
+        const limit = Math.min(500, Math.max(1, parseInt(query.limit || "20", 10)));
         const offset = (page - 1) * limit;
         const order = query.order || "id";
         const direction = query.direction?.toUpperCase() === "DESC" ? "DESC" : "ASC";

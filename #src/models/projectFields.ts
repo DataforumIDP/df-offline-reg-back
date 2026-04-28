@@ -5,6 +5,7 @@ export type ProjectFieldType = 'text' | 'list' | 'bool' | 'id' | 'img' | 'code';
 export interface ListItem {
     value: string;
     color: string; // HEX string
+    isHidden?: boolean; // true = значение скрыто от операторов
 }
 
 // Настройки списка
@@ -24,6 +25,8 @@ export interface ProjectFieldConfig {
     listSettings?: ListSettings;
     random?: boolean; // true = генерировать случайные значения
     isMark?: boolean; // true = поле-отметка для режима выдачи сканера (только для bool)
+    isHidden?: boolean; // true = поле скрыто от операторов (только для admin)
+    isPhone?: boolean; // true = поле является телефоном
 }
 
 // Интерфейс поля проекта

@@ -133,7 +133,7 @@ export const validateUpdateWebhook = (
     res: Response,
     next: NextFunction
 ) => {
-    const { name, isActive } = req.body;
+    const { name, isActive, preScript, postScript } = req.body;
     const errors: Record<string, string> = {};
 
     // Проверка name
@@ -150,6 +150,14 @@ export const validateUpdateWebhook = (
     // Проверка isActive
     if (isActive !== undefined && typeof isActive !== "boolean") {
         errors.isActive = "isActive должен быть boolean";
+    }
+
+    // Проверка скриптов — только строка или null
+    if (preScript !== undefined && preScript !== null && typeof preScript !== "string") {
+        errors.preScript = "preScript должен быть строкой или null";
+    }
+    if (postScript !== undefined && postScript !== null && typeof postScript !== "string") {
+        errors.postScript = "postScript должен быть строкой или null";
     }
 
     if (Object.keys(errors).length > 0) {

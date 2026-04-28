@@ -18,9 +18,14 @@ export function normalizePhone(phone: string | number | null | undefined): strin
     // Оставляем только цифры
     let digits = phoneStr.replace(/\D/g, '');
     
-    // Заменяем 8 в начале на 7 (для российских номеров)
+    // Заменяем 8 в начале на 7 (для российских номеров, 11 цифр)
     if (digits.length === 11 && digits.startsWith('8')) {
         digits = '7' + digits.slice(1);
+    }
+
+    // 10-значный номер без кода страны — считаем российским, добавляем 7
+    if (digits.length === 10) {
+        digits = '7' + digits;
     }
     
     return digits;
@@ -56,11 +61,7 @@ export function formatPhone(phone: string | number | null | undefined, defaultCo
         const parsed = parsePhoneNumber(phoneWithPlus, defaultCountry);
         
         if (parsed && isValidPhoneNumber(phoneWithPlus, defaultCountry)) {
-            // NATIONAL формат: (952) 484-80-41
-            // INTERNATIONAL формат: +7 952 484 80 41
-            // Используем formatNational для локального формата с добавлением кода страны
-            const national = parsed.formatNational();
-            return `+${parsed.countryCallingCode} ${national}`;
+            return parsed.formatInternational();
         }
         
         // Если невалидный номер — пробуем хотя бы частичное форматирование

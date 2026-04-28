@@ -8,6 +8,13 @@ export interface ScanAction {
     value?: string | boolean;
 }
 
+export interface ScanActionRule {
+    prefix: string;
+    type: ScanActionType;
+    fieldKey?: string;
+    value?: string | boolean;
+}
+
 export interface Project {
     id: number;
     title: string;
@@ -23,6 +30,8 @@ export interface Project {
     scan_mode?: ScanMode;
     scanAction: ScanAction | null;
     scan_action?: ScanAction | null;
+    scanActionRules: ScanActionRule[];
+    scan_action_rules?: ScanActionRule[] | null;
     journalEnabled: boolean;
     journal_enabled?: boolean;
     isDelete: boolean;
@@ -44,6 +53,7 @@ export class ProjectHelper {
             rulesField: project.rulesField ?? project.rules_field ?? null,
             scanMode: project.scanMode ?? project.scan_mode ?? 'base',
             scanAction: project.scanAction ?? project.scan_action ?? null,
+            scanActionRules: project.scanActionRules ?? project.scan_action_rules ?? [],
             journalEnabled: project.journalEnabled ?? project.journal_enabled ?? false,
         };
     }
