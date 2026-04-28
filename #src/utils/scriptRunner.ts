@@ -1,5 +1,6 @@
 import ivm from "isolated-vm";
 import axiosLib from "axios";
+import ts from "typescript";
 
 const SCRIPT_TIMEOUT_MS = 2000;
 const MEMORY_LIMIT_MB = 8;
@@ -47,6 +48,11 @@ export async function runScript(
     scriptCode: string,
     data: { user: Record<string, any> }
 ): Promise<Record<string, any>> {
+    // Транспилируем TypeScript → JavaScript (убирает аннотации типов)
+    const jsCode = ts.transpileModule(scriptCode, {
+        compilerOptions: { target: ts.ScriptTarget.ES2020 },
+    }).outputText.trim();
+
     const isolate = new ivm.Isolate({ memoryLimit: MEMORY_LIMIT_MB });
 
     try {
@@ -112,7 +118,7 @@ export async function runScript(
         }
     };
 
-    var __fn__ = ${scriptCode};
+    var __fn__ = ${jsCode};
     var __result__ = await __fn__(data);
     return JSON.stringify(__result__ !== undefined ? __result__ : __userData__);
 })();
