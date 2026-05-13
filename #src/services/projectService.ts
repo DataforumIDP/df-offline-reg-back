@@ -70,9 +70,12 @@ export class ProjectService {
         const { id } = req.params;
         const data = req.body; // Данные уже отфильтрованы и обработаны в middleware
 
-        const [result] = await wrap(ProjectDAL.updateOne(Number(id), data));
+        const [result, err] = await wrap(ProjectDAL.updateOne(Number(id), data));
 
-        if (result === null) return dbError(res, "#UpdProj1");
+        if (result === null) {
+            console.error('[UpdProj1]', err);
+            return dbError(res, "#UpdProj1");
+        }
 
         res.json(ProjectHelper.toJSON(result));
     }
