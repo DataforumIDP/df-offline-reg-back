@@ -70,7 +70,7 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
     // Преобразуем scanActionRules в scan_action_rules для БД
     if ('scanActionRules' in data) {
         data.scan_action_rules = Array.isArray(data.scanActionRules)
-            ? data.scanActionRules
+            ? JSON.stringify(data.scanActionRules)
             : null;
         delete data.scanActionRules;
     }
