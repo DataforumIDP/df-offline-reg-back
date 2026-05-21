@@ -13,6 +13,7 @@ import { scannerRouter } from "./routes/scannerRouter";
 import { sessionsRouter } from "./routes/sessionsRouter";
 import { qrAuthRouter } from "./routes/qrAuthRouter";
 import { cloudFontsRouter } from "./routes/cloudFontsRouter";
+import { apiRouter } from "./routes/apiRouter";
 import { initQrAuthSocket } from "./services/qrAuthService";
 
 const app = express();
@@ -42,6 +43,7 @@ app.use("/scanner", scannerRouter);
 app.use("/sessions", sessionsRouter);
 app.use("/qr-auth", qrAuthRouter);
 app.use("/cloud-fonts", cloudFontsRouter);
+app.use("/api", apiRouter);
 
 // Эндпоинт проверки работоспособности сервера
 app.get("/ping", async (_req, res) => {

@@ -58,7 +58,7 @@ const projectField = new ProjectFieldService();
 const participant = new ParticipantService();
 const participantCode = new ParticipantCodeService();
 
-// ===== Р РѕСѓС‚С‹ РїСЂРѕРµРєС‚РѕРІ =====
+// ===== Роуты проектов =====
 projectsRouter.post("/", createMiddlewares, project.create);
 projectsRouter.patch("/:id", updateMiddlewares, project.update);
 projectsRouter.get("/", getMiddlewares, project.get);
@@ -66,40 +66,40 @@ projectsRouter.get("/:id/users", getMiddlewares, project.getUsers);
 projectsRouter.get("/:slugOrId", getOneMiddlewares, project.getOne);
 projectsRouter.delete("/:id", deleteMiddlewares, project.delete);
 
-// ===== Р РѕСѓС‚С‹ СЃС…РµРјС‹ РїРѕР»РµР№ РїСЂРѕРµРєС‚Р° =====
+// ===== Роуты схемы полей проекта =====
 projectsRouter.get("/:projectId/scheme", getSchemeMiddlewares, projectField.getScheme);
 projectsRouter.post("/:projectId/scheme", createFieldMiddlewares, projectField.createField);
 projectsRouter.put("/:projectId/scheme/:fieldId", updateFieldMiddlewares, projectField.updateField);
 projectsRouter.delete("/:projectId/scheme/:fieldId", deleteFieldMiddlewares, projectField.deleteField);
 
-// ===== Р РѕСѓС‚С‹ С€Р°Р±Р»РѕРЅРѕРІ РїРµС‡Р°С‚Рё РїСЂРѕРµРєС‚Р° =====
+// ===== Роуты шаблонов печати проекта =====
 projectsRouter.get("/:projectId/print-template", getProjectTemplateMiddlewares, printTemplateService.getByProject);
 projectsRouter.post("/:projectId/print-template", assignTemplateMiddlewares, printTemplateService.assignToProject);
 projectsRouter.delete("/:projectId/print-template", removeTemplateMiddlewares, printTemplateService.removeFromProject);
 
-// ===== Р РѕСѓС‚С‹ webhooks РїСЂРѕРµРєС‚Р° =====
+// ===== Роуты webhooks проекта =====
 projectsRouter.get("/:projectId/webhooks", getSchemeMiddlewares, webhookService.getByProject);
 
-// ===== РџРѕРёСЃРє СѓС‡Р°СЃС‚РЅРёРєР° РїРѕ РєРѕРґСѓ =====
+// ===== Поиск участника по коду =====
 projectsRouter.get("/:projectId/code/:code", findByCodeMiddlewares, participantCode.findByCode);
 
-// ===== Р РѕСѓС‚С‹ Р»РѕРіРѕРІ СѓС‡Р°СЃС‚РЅРёРєРѕРІ (РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ Р”Рћ СЂРѕСѓС‚РѕРІ СЃ :participantId) =====
+// ===== Роуты логов участников (должны быть ДО роутов с :participantId) =====
 projectsRouter.get("/:projectId/participants/log/stats", getLogsMiddlewares, participantLogService.getStats);
 projectsRouter.get("/:projectId/participants/log", getLogsMiddlewares, participantLogService.getAll);
 projectsRouter.get("/:projectId/operator/:userId", getLogsMiddlewares, participantLogService.getOperatorStats);
 
-// ===== Excel Рё РјР°СЃСЃРѕРІС‹Рµ РѕРїРµСЂР°С†РёРё (РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ Р”Рћ СЂРѕСѓС‚РѕРІ СЃ :participantId) =====
+// ===== Excel и массовые операции (должны быть ДО роутов с :participantId) =====
 projectsRouter.get("/:projectId/participants/excel", excelTemplateMiddlewares, participant.getExcelTemplate);
 projectsRouter.post("/:projectId/participants/excel", excelImportMiddlewares, participant.importFromExcel);
 projectsRouter.get("/:projectId/participants/export", excelExportMiddlewares, participant.exportToExcel);
 projectsRouter.delete("/:projectId/participants", clearParticipantsMiddlewares, participant.clearAll);
 
-// ===== РћС‡РёСЃС‚РєР° РѕС‚РјРµС‚РѕРє РїРµС‡Р°С‚Рё Рё Р»РѕРіРѕРІ СЃРєР°РЅРµСЂРѕРІ =====
+// ===== Очистка отметок печати и логов сканеров =====
 projectsRouter.delete("/:projectId/prints", clearPrintMarksMiddlewares, participantLogService.clearPrintMarks);
 projectsRouter.delete("/:projectId/scanners/logs", clearScannerLogsMiddlewares, participantLogService.clearScannerLogs);
 
-// ===== РџРѕР»СѓС‡РµРЅРёРµ СЃРїРёСЃРєР° СѓСЃС‚СЂРѕР№СЃС‚РІ РїСЂРѕРµРєС‚Р° =====
-//FIXME: РІС‹РЅРµСЃС‚Рё Р»РѕРіРёРєСѓ
+// ===== Получение списка устройств проекта =====
+//FIXME: вынести логику
 projectsRouter.get("/:projectId/devices", getSchemeMiddlewares, async (req: Request, res: Response) => {
     const projectId = Number(req.params.projectId);
     
@@ -120,7 +120,7 @@ projectsRouter.get("/:projectId/devices", getSchemeMiddlewares, async (req: Requ
 projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExportService.exportScansToExcel);
 projectsRouter.post("/:projectId/scanners/logs/mass", exportMassScansMiddlewares, scanExportService.exportMassScansToExcel);
 
-// ===== Р РѕСѓС‚С‹ СѓС‡Р°СЃС‚РЅРёРєРѕРІ РїСЂРѕРµРєС‚Р° =====
+// ===== Роуты участников проекта =====
 projectsRouter.get("/:projectId/participants", getParticipantsMiddlewares, participant.getAll);
 projectsRouter.get("/:projectId/participants/:participantId", getParticipantMiddlewares, participant.getOne);
 projectsRouter.get("/:projectId/participants/:participantId/log", getParticipantMiddlewares, participantLogService.getByParticipant);

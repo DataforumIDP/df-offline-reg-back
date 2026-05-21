@@ -14,7 +14,8 @@ export const accountsRouter = Router();
 const account = new AccountService();
 
 //FIXME: не актуально 
-accountsRouter.post("/", createMiddlewares, account.crete);
+// accountsRouter.post("/", createMiddlewares, account.crete);
+
 accountsRouter.post("/reg", registerMiddlewares, account.register);
 
 // accountsRouter.post(
