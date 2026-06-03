@@ -241,7 +241,7 @@ export class WebhookService {
             // Генерируем случайные значения для полей типа code с random: true
             if (config.type === 'code' && config.random === true) {
                 if (validatedData[field.key] === undefined || validatedData[field.key] === '') {
-                    validatedData[field.key] = ProjectFieldHelper.generateRandomValue();
+                    validatedData[field.key] = ProjectFieldHelper.generateRandomValue(config);
                 }
             }
 

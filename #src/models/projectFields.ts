@@ -24,10 +24,18 @@ export interface ProjectFieldConfig {
     maxLength?: number;
     listSettings?: ListSettings;
     random?: boolean; // true = генерировать случайные значения
+    /** Длина случайно генерируемого значения (только для type='code', random=true). По умолчанию 20 */
+    codeLength?: number;
+    /** Набор символов для генерации (только для type='code', random=true). По умолчанию a-z0-9 */
+    codeChars?: string;
     isMark?: boolean; // true = поле-отметка для режима выдачи сканера (только для bool)
     isHidden?: boolean; // true = поле скрыто от операторов (только для admin)
     isPhone?: boolean; // true = поле является телефоном
 }
+
+export const DEFAULT_CODE_LENGTH = 20;
+export const DEFAULT_CODE_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+export const MAX_CODE_LENGTH = 200;
 
 // Интерфейс поля проекта
 export interface ProjectField {
@@ -138,6 +146,24 @@ export class ProjectFieldHelper {
             }
         }
 
+        // Валидация параметров генерации кода
+        if (config.codeLength !== undefined) {
+            if (config.type !== 'code') {
+                return { valid: false, error: 'codeLength применим только для типа code' };
+            }
+            if (typeof config.codeLength !== 'number' || !Number.isInteger(config.codeLength) || config.codeLength < 1 || config.codeLength > MAX_CODE_LENGTH) {
+                return { valid: false, error: `codeLength должен быть целым числом от 1 до ${MAX_CODE_LENGTH}` };
+            }
+        }
+        if (config.codeChars !== undefined) {
+            if (config.type !== 'code') {
+                return { valid: false, error: 'codeChars применим только для типа code' };
+            }
+            if (typeof config.codeChars !== 'string' || config.codeChars.length < 1) {
+                return { valid: false, error: 'codeChars должен быть непустой строкой' };
+            }
+        }
+
         // Проверка для флага isMark — только для типа bool
         if (config.isMark) {
             if (config.type !== 'bool') {
@@ -168,11 +194,12 @@ export class ProjectFieldHelper {
             .replace(/^_|_$/g, '');
     }
 
-    // Метод для генерации случайного значения из 20 символов
-    static generateRandomValue(): string {
-        const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    // Метод для генерации случайного значения с учётом настроек поля
+    static generateRandomValue(config?: Pick<ProjectFieldConfig, 'codeLength' | 'codeChars'>): string {
+        const length = config?.codeLength && config.codeLength > 0 ? config.codeLength : DEFAULT_CODE_LENGTH;
+        const chars = config?.codeChars && config.codeChars.length > 0 ? config.codeChars : DEFAULT_CODE_CHARS;
         let result = '';
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < length; i++) {
             result += chars.charAt(Math.floor(Math.random() * chars.length));
         }
         return result;

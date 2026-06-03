@@ -64,7 +64,7 @@ export class ParticipantService {
                 if (field.config.type === 'code' && field.config.random === true) {
                     // Генерируем только если значение не указано
                     if (data[field.key] === undefined || data[field.key] === '') {
-                        data[field.key] = ProjectFieldHelper.generateRandomValue();
+                        data[field.key] = ProjectFieldHelper.generateRandomValue(field.config);
                     }
                 }
             }
@@ -400,7 +400,7 @@ export class ParticipantService {
                 if (field.config.type === 'code' && field.config.random === true) {
                     // Генерируем только если значение не указано
                     if (rowData[field.key] === undefined || rowData[field.key] === '') {
-                        rowData[field.key] = ProjectFieldHelper.generateRandomValue();
+                        rowData[field.key] = ProjectFieldHelper.generateRandomValue(field.config);
                     }
                 }
             }

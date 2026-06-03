@@ -82,7 +82,7 @@ export class ProjectFieldService {
                         if (!currentData[key] || currentData[key] === '') {
                             const newData = {
                                 ...currentData,
-                                [key]: ProjectFieldHelper.generateRandomValue(),
+                                [key]: ProjectFieldHelper.generateRandomValue(config as any),
                             }
 
                             await trx('participants')
@@ -299,7 +299,7 @@ export class ProjectFieldService {
                         const currentData = participant.data || {}
                         const newData = {
                             ...currentData,
-                            [key]: ProjectFieldHelper.generateRandomValue(),
+                            [key]: ProjectFieldHelper.generateRandomValue(config as any),
                         }
 
                         await trx('participants')
