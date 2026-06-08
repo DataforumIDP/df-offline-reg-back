@@ -4,7 +4,7 @@ import nodemailer from "nodemailer";
 import ts from "typescript";
 import { emailAccountsDAL } from "../dal/emailAccountsDAL";
 
-const SCRIPT_TIMEOUT_MS = 2000;
+const SCRIPT_TIMEOUT_MS = 15000;
 const MEMORY_LIMIT_MB = 8;
 const HTTP_TIMEOUT_MS = 8000;
 
@@ -41,6 +41,7 @@ export type ScriptOrigin = 'webhook' | 'excel' | 'form';
  *   data.utils.axios — HTTP-клиент (get/post/put/delete)
  *   data.utils.translitRuToEn(str) — транслитерация рус→лат
  *   data.utils.mail(opts) — отправка письма через сохранённый email-аккаунт
+ *   data.utils.log(message, meta?) — лог в серверную консоль
  *   data.utils.origin — источник: 'webhook' | 'excel' | 'form'
  *
  * - Нет доступа к require, process, fs, глобальным объектам Node.
@@ -97,6 +98,27 @@ export async function runScript(
         });
         await jail.set("__axiosFn__", axiosFn);
 
+        const logFn = new ivm.Reference(async (
+            message: string,
+            metaStr: string | null
+        ): Promise<string> => {
+            let meta: any = undefined;
+            if (metaStr) {
+                try {
+                    meta = JSON.parse(metaStr);
+                } catch {
+                    meta = metaStr;
+                }
+            }
+            if (meta !== undefined) {
+                console.log("[script]", message, meta);
+            } else {
+                console.log("[script]", message);
+            }
+            return JSON.stringify({ ok: true });
+        });
+        await jail.set("__logFn__", logFn);
+
         // mail()-прокси: вызывается из изолята, исполняется в хосте
         const mailFn = new ivm.Reference(async (optsStr: string): Promise<string> => {
             const opts: {
@@ -133,31 +155,44 @@ export async function runScript(
                 ? `"${account.from_name}" <${senderEmail}>`
                 : senderEmail;
 
+            if (!senderEmail) {
+                throw new Error(`mail(): не задан sender email (login/alias) для аккаунта '${opts.slug}'`);
+            }
+
             if ((account.provider ?? 'smtp') === 'rusender') {
                 // ── RuSender API ───────────────────────────────────────────
                 if (!account.api_key) throw new Error(`mail(): api_key не задан для аккаунта '${opts.slug}'`);
                 for (const recipient of recipients) {
-                    await axiosLib.post(
-                        'https://api.rusender.ru/api/v1/external-mails/send',
-                        {
-                            mail: {
-                                to: { email: recipient },
-                                from: {
-                                    email: senderEmail,
-                                    ...(account.from_name ? { name: account.from_name } : {}),
+                    try {
+                        await axiosLib.post(
+                            'https://api.rusender.ru/api/v1/external-mails/send',
+                            {
+                                mail: {
+                                    to: { email: recipient },
+                                    from: {
+                                        email: senderEmail,
+                                        ...(account.from_name ? { name: account.from_name } : {}),
+                                    },
+                                    subject: opts.theme,
+                                    html,
                                 },
-                                subject: opts.theme,
-                                html,
                             },
-                        },
-                        {
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Api-Key': account.api_key,
-                            },
-                            timeout: HTTP_TIMEOUT_MS,
+                            {
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Api-Key': account.api_key,
+                                },
+                                timeout: HTTP_TIMEOUT_MS,
+                            }
+                        );
+                    } catch (err: any) {
+                        if (axiosLib.isAxiosError(err)) {
+                            const status = err.response?.status;
+                            const body = err.response?.data;
+                            throw new Error(`mail(): rusender error status=${status ?? 'unknown'} body=${JSON.stringify(body ?? err.message)}`);
                         }
-                    );
+                        throw err;
+                    }
                 }
             } else {
                 // ── SMTP via nodemailer ────────────────────────────────────
@@ -208,6 +243,10 @@ export async function runScript(
             },
             mail: async function(opts) {
                 var r = await __mailFn__.apply(null, [JSON.stringify(opts)], { arguments: { copy: true }, result: { promise: true, copy: true } });
+                return JSON.parse(r);
+            },
+            log: async function(message, meta) {
+                var r = await __logFn__.apply(null, [String(message), meta !== undefined ? JSON.stringify(meta) : null], { arguments: { copy: true }, result: { promise: true, copy: true } });
                 return JSON.parse(r);
             },
             /** Источник регистрации: 'webhook' | 'excel' | 'form' */
