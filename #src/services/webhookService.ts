@@ -11,6 +11,7 @@ import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
 import { normalizeParticipantPhones, getPhoneFieldKeys } from "../utils/phoneUtils";
 import { runScript } from "../utils/scriptRunner";
+import { db } from "../config/db";
 
 const participantsDAL = new ParticipantsDAL();
 const fieldsDAL = new ProjectFieldsDAL();
@@ -114,15 +115,32 @@ export class WebhookService {
         const rawData = req.body;
         const projectId = webhook.project_id;
 
-        // ── Прескрипт: кастомная валидация/трансформация сырых данных ──
+        // Загружаем скрипты уровня проекта
+        const projectRow = await db("projects").where({ id: projectId }).first("pre_script", "post_script");
+        const projectPreScript: string | null = projectRow?.pre_script ?? null;
+        const projectPostScript: string | null = projectRow?.post_script ?? null;
+
+        // ── Прескрипт вебхука (специфичный для этого хука) ──
         let data = rawData;
         if (webhook.pre_script) {
             try {
-                data = await runScript(webhook.pre_script, { user: rawData });
+                data = await runScript(webhook.pre_script, { user: rawData }, 'webhook');
             } catch (scriptErr: any) {
                 return res.status(400).json({
                     success: false,
-                    error: scriptErr?.message ?? "Ошибка прескрипта",
+                    error: scriptErr?.message ?? "Ошибка прескрипта вебхука",
+                });
+            }
+        }
+
+        // ── Прескрипт проекта ──
+        if (projectPreScript) {
+            try {
+                data = await runScript(projectPreScript, { user: data }, 'webhook');
+            } catch (scriptErr: any) {
+                return res.status(400).json({
+                    success: false,
+                    error: scriptErr?.message ?? "Ошибка прескрипта проекта",
                 });
             }
         }
@@ -284,11 +302,11 @@ export class WebhookService {
             currentData: participant.data,
         });
 
-        // ── Постскрипт: кастомная обработка после сохранения ──
+        // ── Постскрипт вебхука ──
         let finalData = participant.data;
         if (webhook.post_script) {
             try {
-                const result = await runScript(webhook.post_script, { user: participant.data });
+                const result = await runScript(webhook.post_script, { user: participant.data }, 'webhook');
                 // Если постскрипт вернул изменения — сохраняем их
                 const [updated] = await wrap(
                     participantsDAL.update(participant.id, result)
@@ -299,6 +317,17 @@ export class WebhookService {
             } catch (scriptErr: any) {
                 // Постскрипт не должен откатывать сохранение, только логируем
                 console.error(`[WEBHOOK POST_SCRIPT] webhook=${webhook.slug} error:`, scriptErr?.message);
+            }
+        }
+
+        // ── Постскрипт проекта ──
+        if (projectPostScript) {
+            try {
+                const result = await runScript(projectPostScript, { user: finalData }, 'webhook');
+                const [updated] = await wrap(participantsDAL.update(participant.id, result));
+                if (updated) finalData = result;
+            } catch (scriptErr: any) {
+                console.error(`[PROJECT POST_SCRIPT webhook] webhook=${webhook.slug} error:`, scriptErr?.message);
             }
         }
 

@@ -10,6 +10,8 @@ import { wrap } from "../utils/wrap";
 import { response201, response204 } from "../utils/responses";
 import { paginationResponse } from "../utils/paginationUtils";
 import { normalizeParticipantPhones, formatParticipantPhones, getPhoneFieldKeys } from "../utils/phoneUtils";
+import { runScript } from "../utils/scriptRunner";
+import { db } from "../config/db";
 
 const participantDAL = new ParticipantsDAL();
 const fieldDAL = new ProjectFieldsDAL();
@@ -53,8 +55,22 @@ export class ParticipantService {
      */
     async create(req: Request, res: Response) {
         const projectId = Number(req.params.projectId);
-        const data = { ...req.body };
         const userId = req.account?.id || null;
+
+        // Загружаем скрипты проекта
+        const projectRow = await db("projects").where({ id: projectId }).first("pre_script", "post_script");
+        const preScript: string | null = projectRow?.pre_script ?? null;
+        const postScript: string | null = projectRow?.post_script ?? null;
+
+        // Прескрипт: трансформация/валидация сырых данных до всей остальной обработки
+        let data: Record<string, any> = { ...req.body };
+        if (preScript) {
+            try {
+                data = await runScript(preScript, { user: data }, 'form');
+            } catch (scriptErr: any) {
+                return res.status(400).json({ success: false, error: scriptErr?.message ?? "Ошибка прескрипта" });
+            }
+        }
 
         // Получаем схему проекта для генерации автоматических полей
         const [fields] = await wrap(fieldDAL.getByProjectId(projectId));
@@ -124,7 +140,19 @@ export class ParticipantService {
             currentData: participant.data,
         });
 
-        response201(res, ParticipantHelper.toJSON(participant));
+        // Постскрипт: обработка после сохранения
+        let finalData = participant.data;
+        if (postScript) {
+            try {
+                const result = await runScript(postScript, { user: participant.data }, 'form');
+                const [updated] = await wrap(participantDAL.update(participant.id, result));
+                if (updated) finalData = result;
+            } catch (scriptErr: any) {
+                console.error(`[PROJECT POST_SCRIPT form] projectId=${projectId} error:`, scriptErr?.message);
+            }
+        }
+
+        response201(res, ParticipantHelper.toJSON({ ...participant, data: finalData }));
     }
 
     /**
@@ -289,6 +317,11 @@ export class ParticipantService {
         const projectId = Number(req.params.projectId);
         const userId = req.account?.id || null;
 
+        // Загружаем скрипты проекта
+        const projectRow = await db("projects").where({ id: projectId }).first("pre_script", "post_script");
+        const preScript: string | null = projectRow?.pre_script ?? null;
+        const postScript: string | null = projectRow?.post_script ?? null;
+
         // Проверяем наличие файла
         if (!req.files || !req.files.file) {
             return errorSend(res, { message: "Файл не загружен" });
@@ -435,7 +468,18 @@ export class ParticipantService {
             if (errors.filter(e => e.row === rowNum).length === 0) {
                 // Нормализуем телефонные номера перед добавлением
                 const phoneFieldKeys = getPhoneFieldKeys(fields as any);
-                const normalizedRow = normalizeParticipantPhones(rowData, phoneFieldKeys);
+                let normalizedRow = normalizeParticipantPhones(rowData, phoneFieldKeys);
+
+                // Прескрипт (per-row)
+                if (preScript) {
+                    try {
+                        normalizedRow = await runScript(preScript, { user: normalizedRow }, 'excel');
+                    } catch (scriptErr: any) {
+                        errors.push({ row: rowNum, field: '_script', message: scriptErr?.message ?? 'Ошибка прескрипта' });
+                        continue;
+                    }
+                }
+
                 validRows.push(normalizedRow);
             }
         }
@@ -469,6 +513,16 @@ export class ParticipantService {
                 userId,
                 currentData: participant.data,
             });
+
+            // Постскрипт (per-participant)
+            if (postScript) {
+                try {
+                    const result = await runScript(postScript, { user: participant.data }, 'excel');
+                    await wrap(participantDAL.update(participant.id, result));
+                } catch (scriptErr: any) {
+                    console.error(`[PROJECT POST_SCRIPT excel] projectId=${projectId} participantId=${participant.id} error:`, scriptErr?.message);
+                }
+            }
         }
 
         res.json({

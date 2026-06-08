@@ -8,6 +8,7 @@ import { printTemplateService } from "../services/printTemplateService";
 import { webhookService } from "../services/webhookService";
 import { scannersDAL } from "../dal/scannersDAL";
 import { deviceJournalService } from "../services/deviceJournalService";
+import { db } from "../config/db";
 import {
     getJournalMiddlewares,
     getJournalStatsMiddlewares,
@@ -79,6 +80,30 @@ projectsRouter.delete("/:projectId/print-template", removeTemplateMiddlewares, p
 
 // ===== Роуты webhooks проекта =====
 projectsRouter.get("/:projectId/webhooks", getSchemeMiddlewares, webhookService.getByProject);
+
+// ===== Скрипты проекта (пре/постскрипт применяются ко всем видам регистрации) =====
+projectsRouter.get("/:projectId/scripts", getSchemeMiddlewares, async (req: Request, res: Response) => {
+    const projectId = Number(req.params.projectId);
+    const row = await db("projects").where({ id: projectId }).first("pre_script", "post_script");
+    res.json({ preScript: row?.pre_script ?? null, postScript: row?.post_script ?? null });
+});
+projectsRouter.put("/:projectId/scripts", getSchemeMiddlewares, async (req: Request, res: Response) => {
+    const projectId = Number(req.params.projectId);
+    const { preScript, postScript } = req.body;
+    if (preScript !== undefined && preScript !== null && typeof preScript !== "string") {
+        return res.status(400).json({ errors: { preScript: "preScript должен быть строкой или null" } });
+    }
+    if (postScript !== undefined && postScript !== null && typeof postScript !== "string") {
+        return res.status(400).json({ errors: { postScript: "postScript должен быть строкой или null" } });
+    }
+    await db("projects").where({ id: projectId }).update({
+        pre_script: preScript ?? null,
+        post_script: postScript ?? null,
+        updatedAt: db.fn.now(),
+    });
+    const row = await db("projects").where({ id: projectId }).first("pre_script", "post_script");
+    res.json({ preScript: row?.pre_script ?? null, postScript: row?.post_script ?? null });
+});
 
 // ===== Поиск участника по коду =====
 projectsRouter.get("/:projectId/code/:code", findByCodeMiddlewares, participantCode.findByCode);

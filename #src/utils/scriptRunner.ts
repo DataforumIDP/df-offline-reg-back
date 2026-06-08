@@ -29,6 +29,8 @@ function translitRuToEn(str) {
 }
 `;
 
+export type ScriptOrigin = 'webhook' | 'excel' | 'form';
+
 /**
  * Выполняет произвольный JS/TS-скрипт в изолированном V8 isolate.
  *
@@ -38,6 +40,8 @@ function translitRuToEn(str) {
  *   data.user        — пользовательские данные
  *   data.utils.axios — HTTP-клиент (get/post/put/delete)
  *   data.utils.translitRuToEn(str) — транслитерация рус→лат
+ *   data.utils.mail(opts) — отправка письма через сохранённый email-аккаунт
+ *   data.utils.origin — источник: 'webhook' | 'excel' | 'form'
  *
  * - Нет доступа к require, process, fs, глобальным объектам Node.
  * - Таймаут CPU: 2 секунды.
@@ -48,7 +52,8 @@ function translitRuToEn(str) {
  */
 export async function runScript(
     scriptCode: string,
-    data: { user: Record<string, any> }
+    data: { user: Record<string, any> },
+    origin: ScriptOrigin = 'form'
 ): Promise<Record<string, any>> {
     // Транспилируем TypeScript → JavaScript (убирает аннотации типов)
     const jsCode = ts.transpileModule(scriptCode, {
@@ -66,6 +71,7 @@ export async function runScript(
             "__userData__",
             new ivm.ExternalCopy(data.user).copyInto()
         );
+        await jail.set("__origin__", new ivm.ExternalCopy(origin).copyInto());
 
         // Axios-прокси: вызывается из изолята, исполняется в хосте
         const axiosFn = new ivm.Reference(async (
@@ -174,6 +180,8 @@ export async function runScript(
                 var r = await __mailFn__.apply(null, [JSON.stringify(opts)], { arguments: { copy: true }, result: { promise: true, copy: true } });
                 return JSON.parse(r);
             },
+            /** Источник регистрации: 'webhook' | 'excel' | 'form' */
+            origin: __origin__,
         }
     };
 
