@@ -1,12 +1,16 @@
+export type EmailProvider = 'smtp' | 'rusender';
+
 export interface EmailAccount {
     id: number;
     slug: string;
-    host: string;
-    port: number;
-    secure: boolean;
-    login: string;
+    provider: EmailProvider;
+    host: string | null;
+    port: number | null;
+    secure: boolean | null;
+    login: string | null;
     alias: string | null;
-    password: string;
+    api_key: string | null;
+    password: string | null;
     from_name: string | null;
     is_delete: boolean;
     created_at: Date;
@@ -16,10 +20,11 @@ export interface EmailAccount {
 export interface EmailAccountJSON {
     id: number;
     slug: string;
-    host: string;
-    port: number;
-    secure: boolean;
-    login: string;
+    provider: EmailProvider;
+    host: string | null;
+    port: number | null;
+    secure: boolean | null;
+    login: string | null;
     alias: string | null;
     fromName: string | null;
     createdAt: string;
@@ -32,10 +37,11 @@ export class EmailAccountHelper {
         return {
             id: account.id,
             slug: account.slug,
-            host: account.host,
-            port: account.port,
-            secure: account.secure,
-            login: account.login,
+            provider: account.provider ?? 'smtp',
+            host: account.host ?? null,
+            port: account.port ?? null,
+            secure: account.secure ?? null,
+            login: account.login ?? null,
             alias: account.alias ?? null,
             fromName: account.from_name ?? null,
             createdAt: account.created_at.toISOString(),

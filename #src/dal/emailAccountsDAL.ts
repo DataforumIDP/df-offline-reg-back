@@ -1,24 +1,30 @@
 import { BaseDAL } from "./_baseDAL";
-import { EmailAccount } from "../models/emailAccounts";
+import { EmailAccount, EmailProvider } from "../models/emailAccounts";
 
 export interface CreateEmailAccountData {
     slug: string;
-    host: string;
-    port: number;
-    secure: boolean;
-    login: string;
-    password: string;
+    provider: EmailProvider;
+    // SMTP fields (required for provider='smtp')
+    host?: string | null;
+    port?: number | null;
+    secure?: boolean | null;
+    login?: string | null;
+    password?: string | null;
+    // Rusender fields (required for provider='rusender')
+    api_key?: string | null;
     alias?: string | null;
     from_name?: string | null;
 }
 
 export interface UpdateEmailAccountData {
     slug?: string;
-    host?: string;
-    port?: number;
-    secure?: boolean;
-    login?: string;
-    password?: string;
+    provider?: EmailProvider;
+    host?: string | null;
+    port?: number | null;
+    secure?: boolean | null;
+    login?: string | null;
+    password?: string | null;
+    api_key?: string | null;
     alias?: string | null;
     from_name?: string | null;
 }

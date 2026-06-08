@@ -22,35 +22,56 @@ class EmailAccountsService {
 
     /**
      * POST /email-accounts
-     * Body: { slug, host, port, secure, login, password, fromName? }
+     * Body: { slug, provider, host?, port?, secure?, login?, password?, apiKey?, alias?, fromName? }
      */
     async create(req: Request, res: Response, next: NextFunction) {
         try {
-            const { slug, host, port, secure, login, password, alias, fromName } = req.body;
+            const { slug, provider = 'smtp', host, port, secure, login, password, apiKey, alias, fromName } = req.body;
 
             const errors: Record<string, string> = {};
             if (!slug || !SLUG_RE.test(slug)) errors.slug = "slug: только a-z, 0-9, _ и - (до 100 символов)";
-            if (!host?.trim()) errors.host = "Хост обязателен";
-            if (port === undefined || port === null || !Number.isInteger(Number(port)) || Number(port) < 1 || Number(port) > 65535)
-                errors.port = "Порт должен быть числом от 1 до 65535";
-            if (!login?.trim()) errors.login = "Логин обязателен";
-            if (!password?.trim()) errors.password = "Пароль обязателен";
+            if (provider !== 'smtp' && provider !== 'rusender') errors.provider = "provider: smtp или rusender";
+
+            if (provider === 'smtp' || !provider) {
+                if (!host?.trim()) errors.host = "Хост обязателен";
+                if (port === undefined || port === null || !Number.isInteger(Number(port)) || Number(port) < 1 || Number(port) > 65535)
+                    errors.port = "Порт должен быть числом от 1 до 65535";
+                if (!login?.trim()) errors.login = "Логин обязателен";
+                if (!password?.trim()) errors.password = "Пароль обязателен";
+            } else {
+                // rusender
+                if (!apiKey?.trim()) errors.apiKey = "API-ключ обязателен";
+                if (!login?.trim()) errors.login = "Email отправителя обязателен";
+            }
+
             if (Object.keys(errors).length) return errorSend(res, errors);
 
             const taken = await emailAccountsDAL.isSlugTaken(slug);
             if (taken) return errorSend(res, { slug: "Такой slug уже занят" });
 
             const [account, err] = await wrap(
-                emailAccountsDAL.create({
-                    slug,
-                    host: host.trim(),
-                    port: Number(port),
-                    secure: secure !== false && secure !== "false",
-                    login: login.trim(),
-                    password: password.trim(),
-                    alias: alias?.trim() || null,
-                    from_name: fromName?.trim() || null,
-                })
+                emailAccountsDAL.create(
+                    provider === 'rusender'
+                        ? {
+                            slug,
+                            provider: 'rusender',
+                            login: login.trim(),
+                            api_key: apiKey.trim(),
+                            alias: alias?.trim() || null,
+                            from_name: fromName?.trim() || null,
+                        }
+                        : {
+                            slug,
+                            provider: 'smtp',
+                            host: host.trim(),
+                            port: Number(port),
+                            secure: secure !== false && secure !== "false",
+                            login: login.trim(),
+                            password: password.trim(),
+                            alias: alias?.trim() || null,
+                            from_name: fromName?.trim() || null,
+                        }
+                )
             );
             if (err || !account) return dbError(res, "#CREATEEMAILACCOUNT1");
 
@@ -69,10 +90,11 @@ class EmailAccountsService {
             const existing = await emailAccountsDAL.getById(id);
             if (!existing) return error404(res, "Email-аккаунт не найден");
 
-            const { slug, host, port, secure, login, password, alias, fromName } = req.body;
+            const { slug, provider, host, port, secure, login, password, apiKey, alias, fromName } = req.body;
 
             const errors: Record<string, string> = {};
             if (slug !== undefined && !SLUG_RE.test(slug)) errors.slug = "slug: только a-z, 0-9, _ и - (до 100 символов)";
+            if (provider !== undefined && provider !== 'smtp' && provider !== 'rusender') errors.provider = "provider: smtp или rusender";
             if (port !== undefined && (!Number.isInteger(Number(port)) || Number(port) < 1 || Number(port) > 65535))
                 errors.port = "Порт должен быть числом от 1 до 65535";
             if (Object.keys(errors).length) return errorSend(res, errors);
@@ -84,11 +106,13 @@ class EmailAccountsService {
 
             const updateData: Record<string, any> = {};
             if (slug !== undefined) updateData.slug = slug;
-            if (host !== undefined) updateData.host = host.trim();
+            if (provider !== undefined) updateData.provider = provider;
+            if (host !== undefined) updateData.host = host?.trim() || null;
             if (port !== undefined) updateData.port = Number(port);
             if (secure !== undefined) updateData.secure = secure !== false && secure !== "false";
-            if (login !== undefined) updateData.login = login.trim();
+            if (login !== undefined) updateData.login = login?.trim() || null;
             if (password !== undefined && password.trim()) updateData.password = password.trim();
+            if (apiKey !== undefined) updateData.api_key = apiKey?.trim() || null;
             if (alias !== undefined) updateData.alias = alias?.trim() || null;
             if (fromName !== undefined) updateData.from_name = fromName?.trim() || null;
 

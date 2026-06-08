@@ -127,25 +127,54 @@ export async function runScript(
                 }
             }
 
-            const transporter = nodemailer.createTransport({
-                host: account.host,
-                port: account.port,
-                secure: account.secure,
-                auth: { user: account.login, pass: account.password },
-            });
-
             const recipients = Array.isArray(opts.mail) ? opts.mail : [opts.mail];
             const senderEmail = account.alias?.trim() || account.login;
             const fromAddress = account.from_name
                 ? `"${account.from_name}" <${senderEmail}>`
                 : senderEmail;
 
-            await transporter.sendMail({
-                from: fromAddress,
-                to: recipients.join(", "),
-                subject: opts.theme,
-                html,
-            });
+            if ((account.provider ?? 'smtp') === 'rusender') {
+                // ── RuSender API ───────────────────────────────────────────
+                if (!account.api_key) throw new Error(`mail(): api_key не задан для аккаунта '${opts.slug}'`);
+                for (const recipient of recipients) {
+                    await axiosLib.post(
+                        'https://api.rusender.ru/api/v1/external-mails/send',
+                        {
+                            mail: {
+                                to: { email: recipient },
+                                from: {
+                                    email: senderEmail,
+                                    ...(account.from_name ? { name: account.from_name } : {}),
+                                },
+                                subject: opts.theme,
+                                html,
+                            },
+                        },
+                        {
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Api-Key': account.api_key,
+                            },
+                            timeout: HTTP_TIMEOUT_MS,
+                        }
+                    );
+                }
+            } else {
+                // ── SMTP via nodemailer ────────────────────────────────────
+                const transporter = nodemailer.createTransport({
+                    host: account.host!,
+                    port: account.port!,
+                    secure: account.secure!,
+                    auth: { user: account.login!, pass: account.password! },
+                });
+
+                await transporter.sendMail({
+                    from: fromAddress ?? account.login ?? undefined,
+                    to: recipients.join(", "),
+                    subject: opts.theme,
+                    html,
+                });
+            }
 
             return JSON.stringify({ ok: true, recipients: recipients.length });
         });
