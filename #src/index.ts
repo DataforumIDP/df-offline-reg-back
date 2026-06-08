@@ -13,6 +13,7 @@ import { scannerRouter } from "./routes/scannerRouter";
 import { sessionsRouter } from "./routes/sessionsRouter";
 import { qrAuthRouter } from "./routes/qrAuthRouter";
 import { cloudFontsRouter } from "./routes/cloudFontsRouter";
+import { emailAccountsRouter } from "./routes/emailAccountsRouter";
 import { apiRouter } from "./routes/apiRouter";
 import { initQrAuthSocket } from "./services/qrAuthService";
 
@@ -43,6 +44,7 @@ app.use("/scanner", scannerRouter);
 app.use("/sessions", sessionsRouter);
 app.use("/qr-auth", qrAuthRouter);
 app.use("/cloud-fonts", cloudFontsRouter);
+app.use("/email-accounts", emailAccountsRouter);
 app.use("/api", apiRouter);
 
 // Эндпоинт проверки работоспособности сервера

@@ -1,6 +1,8 @@
 import ivm from "isolated-vm";
 import axiosLib from "axios";
+import nodemailer from "nodemailer";
 import ts from "typescript";
+import { emailAccountsDAL } from "../dal/emailAccountsDAL";
 
 const SCRIPT_TIMEOUT_MS = 2000;
 const MEMORY_LIMIT_MB = 8;
@@ -89,6 +91,59 @@ export async function runScript(
         });
         await jail.set("__axiosFn__", axiosFn);
 
+        // mail()-прокси: вызывается из изолята, исполняется в хосте
+        const mailFn = new ivm.Reference(async (optsStr: string): Promise<string> => {
+            const opts: {
+                slug: string;
+                mail: string | string[];
+                html: string;
+                theme: string;
+                params?: Record<string, string>;
+            } = JSON.parse(optsStr);
+
+            const account = await emailAccountsDAL.getBySlug(opts.slug);
+            if (!account) throw new Error(`mail(): email-аккаунт '${opts.slug}' не найден`);
+
+            // Получаем HTML — либо скачиваем по URL, либо используем как есть
+            let html = opts.html;
+            if (/^https?:\/\//i.test(html)) {
+                const resp = await axiosLib.get<string>(html, {
+                    timeout: HTTP_TIMEOUT_MS,
+                    responseType: "text",
+                });
+                html = resp.data;
+            }
+
+            // Подставляем параметры
+            if (opts.params && typeof opts.params === "object") {
+                for (const [key, value] of Object.entries(opts.params)) {
+                    html = html.split(key).join(String(value));
+                }
+            }
+
+            const transporter = nodemailer.createTransport({
+                host: account.host,
+                port: account.port,
+                secure: account.secure,
+                auth: { user: account.login, pass: account.password },
+            });
+
+            const recipients = Array.isArray(opts.mail) ? opts.mail : [opts.mail];
+            const fromAddress = account.from_name
+                ? `"${account.from_name}" <${account.login}>`
+                : account.login;
+
+            await transporter.sendMail({
+                from: fromAddress,
+                to: recipients.join(", "),
+                subject: opts.theme,
+                html,
+            });
+
+            return JSON.stringify({ ok: true, recipients: recipients.length });
+        });
+        await jail.set("__mailFn__", mailFn);
+
         const wrappedCode = `
 (async function() {
     ${TRANSLIT_FN_SRC}
@@ -114,7 +169,11 @@ export async function runScript(
                     var r = await __axiosFn__.apply(null, ['delete', url, null, cfg ? JSON.stringify(cfg) : null], { arguments: { copy: true }, result: { promise: true, copy: true } });
                     return JSON.parse(r);
                 },
-            }
+            },
+            mail: async function(opts) {
+                var r = await __mailFn__.apply(null, [JSON.stringify(opts)], { arguments: { copy: true }, result: { promise: true, copy: true } });
+                return JSON.parse(r);
+            },
         }
     };
 
