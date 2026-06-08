@@ -8,6 +8,7 @@ export interface CreateEmailAccountData {
     secure: boolean;
     login: string;
     password: string;
+    alias?: string | null;
     from_name?: string | null;
 }
 
@@ -18,6 +19,7 @@ export interface UpdateEmailAccountData {
     secure?: boolean;
     login?: string;
     password?: string;
+    alias?: string | null;
     from_name?: string | null;
 }
 

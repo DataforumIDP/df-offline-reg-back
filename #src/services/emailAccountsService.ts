@@ -26,7 +26,7 @@ class EmailAccountsService {
      */
     async create(req: Request, res: Response, next: NextFunction) {
         try {
-            const { slug, host, port, secure, login, password, fromName } = req.body;
+            const { slug, host, port, secure, login, password, alias, fromName } = req.body;
 
             const errors: Record<string, string> = {};
             if (!slug || !SLUG_RE.test(slug)) errors.slug = "slug: только a-z, 0-9, _ и - (до 100 символов)";
@@ -48,6 +48,7 @@ class EmailAccountsService {
                     secure: secure !== false && secure !== "false",
                     login: login.trim(),
                     password: password.trim(),
+                    alias: alias?.trim() || null,
                     from_name: fromName?.trim() || null,
                 })
             );
@@ -68,7 +69,7 @@ class EmailAccountsService {
             const existing = await emailAccountsDAL.getById(id);
             if (!existing) return error404(res, "Email-аккаунт не найден");
 
-            const { slug, host, port, secure, login, password, fromName } = req.body;
+            const { slug, host, port, secure, login, password, alias, fromName } = req.body;
 
             const errors: Record<string, string> = {};
             if (slug !== undefined && !SLUG_RE.test(slug)) errors.slug = "slug: только a-z, 0-9, _ и - (до 100 символов)";
@@ -88,6 +89,7 @@ class EmailAccountsService {
             if (secure !== undefined) updateData.secure = secure !== false && secure !== "false";
             if (login !== undefined) updateData.login = login.trim();
             if (password !== undefined && password.trim()) updateData.password = password.trim();
+            if (alias !== undefined) updateData.alias = alias?.trim() || null;
             if (fromName !== undefined) updateData.from_name = fromName?.trim() || null;
 
             const [updated, err] = await wrap(emailAccountsDAL.update(id, updateData));

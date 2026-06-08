@@ -135,9 +135,10 @@ export async function runScript(
             });
 
             const recipients = Array.isArray(opts.mail) ? opts.mail : [opts.mail];
+            const senderEmail = account.alias?.trim() || account.login;
             const fromAddress = account.from_name
-                ? `"${account.from_name}" <${account.login}>`
-                : account.login;
+                ? `"${account.from_name}" <${senderEmail}>`
+                : senderEmail;
 
             await transporter.sendMail({
                 from: fromAddress,

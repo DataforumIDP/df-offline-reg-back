@@ -5,6 +5,7 @@ export interface EmailAccount {
     port: number;
     secure: boolean;
     login: string;
+    alias: string | null;
     password: string;
     from_name: string | null;
     is_delete: boolean;
@@ -19,6 +20,7 @@ export interface EmailAccountJSON {
     port: number;
     secure: boolean;
     login: string;
+    alias: string | null;
     fromName: string | null;
     createdAt: string;
     updatedAt: string;
@@ -34,6 +36,7 @@ export class EmailAccountHelper {
             port: account.port,
             secure: account.secure,
             login: account.login,
+            alias: account.alias ?? null,
             fromName: account.from_name ?? null,
             createdAt: account.created_at.toISOString(),
             updatedAt: account.updated_at.toISOString(),
