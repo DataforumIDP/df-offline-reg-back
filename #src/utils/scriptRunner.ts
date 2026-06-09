@@ -7,6 +7,44 @@ import { emailAccountsDAL } from "../dal/emailAccountsDAL";
 const SCRIPT_TIMEOUT_MS = 15000;
 const MEMORY_LIMIT_MB = 8;
 const HTTP_TIMEOUT_MS = 8000;
+const MAIL_QUEUE_RPS = 5;
+const MAIL_QUEUE_INTERVAL_MS = Math.ceil(1000 / MAIL_QUEUE_RPS);
+
+type MailQueueTask = {
+    run: () => Promise<any>;
+    resolve: (value: any) => void;
+    reject: (reason?: any) => void;
+};
+
+const mailQueue: MailQueueTask[] = [];
+let mailQueueTimer: ReturnType<typeof setInterval> | null = null;
+
+function startMailQueueProcessor() {
+    if (mailQueueTimer) return;
+
+    // Один запуск каждые 200мс => максимум 5 стартов отправки в секунду (FIFO)
+    mailQueueTimer = setInterval(() => {
+        const task = mailQueue.shift();
+        if (!task) return;
+
+        void task
+            .run()
+            .then(task.resolve)
+            .catch(task.reject);
+    }, MAIL_QUEUE_INTERVAL_MS);
+
+    // Не держим event loop живым, если больше ничего не выполняется
+    if (typeof (mailQueueTimer as any).unref === "function") {
+        (mailQueueTimer as any).unref();
+    }
+}
+
+function enqueueMailTask<T>(run: () => Promise<T>): Promise<T> {
+    startMailQueueProcessor();
+    return new Promise<T>((resolve, reject) => {
+        mailQueue.push({ run, resolve, reject });
+    });
+}
 
 // Функция транслитерации — передаётся как исходный код внутрь изолята
 const TRANSLIT_FN_SRC = `
@@ -164,26 +202,28 @@ export async function runScript(
                 if (!account.api_key) throw new Error(`mail(): api_key не задан для аккаунта '${opts.slug}'`);
                 for (const recipient of recipients) {
                     try {
-                        await axiosLib.post(
-                            'https://api.rusender.ru/api/v1/external-mails/send',
-                            {
-                                mail: {
-                                    to: { email: recipient },
-                                    from: {
-                                        email: senderEmail,
-                                        ...(account.from_name ? { name: account.from_name } : {}),
+                        await enqueueMailTask(() =>
+                            axiosLib.post(
+                                'https://api.rusender.ru/api/v1/external-mails/send',
+                                {
+                                    mail: {
+                                        to: { email: recipient },
+                                        from: {
+                                            email: senderEmail,
+                                            ...(account.from_name ? { name: account.from_name } : {}),
+                                        },
+                                        subject: opts.theme,
+                                        html,
                                     },
-                                    subject: opts.theme,
-                                    html,
                                 },
-                            },
-                            {
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-Api-Key': account.api_key,
-                                },
-                                timeout: HTTP_TIMEOUT_MS,
-                            }
+                                {
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-Api-Key': account.api_key,
+                                    },
+                                    timeout: HTTP_TIMEOUT_MS,
+                                }
+                            )
                         );
                     } catch (err: any) {
                         if (axiosLib.isAxiosError(err)) {
@@ -203,12 +243,14 @@ export async function runScript(
                     auth: { user: account.login!, pass: account.password! },
                 });
 
-                await transporter.sendMail({
-                    from: fromAddress ?? account.login ?? undefined,
-                    to: recipients.join(", "),
-                    subject: opts.theme,
-                    html,
-                });
+                await enqueueMailTask(() =>
+                    transporter.sendMail({
+                        from: fromAddress ?? account.login ?? undefined,
+                        to: recipients.join(", "),
+                        subject: opts.theme,
+                        html,
+                    })
+                );
             }
 
             return JSON.stringify({ ok: true, recipients: recipients.length });
