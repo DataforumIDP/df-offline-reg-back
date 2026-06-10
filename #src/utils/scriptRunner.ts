@@ -46,6 +46,23 @@ function enqueueMailTask<T>(run: () => Promise<T>): Promise<T> {
     });
 }
 
+function applyTemplateParams(
+    value: string,
+    params?: Record<string, string>,
+    encodeValue?: (value: string) => string
+): string {
+    if (!params || typeof params !== "object") {
+        return value;
+    }
+
+    let result = value;
+    for (const [key, rawValue] of Object.entries(params)) {
+        const nextValue = String(rawValue ?? "");
+        result = result.split(key).join(encodeValue ? encodeValue(nextValue) : nextValue);
+    }
+    return result;
+}
+
 // Функция транслитерации — передаётся как исходный код внутрь изолята
 const TRANSLIT_FN_SRC = `
 function translitRuToEn(str) {
@@ -165,6 +182,11 @@ export async function runScript(
                 html: string;
                 theme: string;
                 params?: Record<string, string>;
+                attachments?: Array<{
+                    filename: string;
+                    url?: string;
+                    base64?: string;
+                }>;
             } = JSON.parse(optsStr);
 
             const account = await emailAccountsDAL.getBySlug(opts.slug);
@@ -181,11 +203,53 @@ export async function runScript(
             }
 
             // Подставляем параметры
-            if (opts.params && typeof opts.params === "object") {
-                for (const [key, value] of Object.entries(opts.params)) {
-                    html = html.split(key).join(String(value));
-                }
-            }
+            html = applyTemplateParams(html, opts.params);
+
+            const attachments = Array.isArray(opts.attachments) ? opts.attachments : [];
+            const resolvedAttachments = await Promise.all(
+                attachments.map(async (attachment) => {
+                    if (!attachment?.filename?.trim()) {
+                        throw new Error("mail(): attachment.filename обязателен");
+                    }
+
+                    let base64 = attachment.base64?.trim() || "";
+                    let contentBuffer: Buffer | null = null;
+
+                    if (base64.startsWith("data:")) {
+                        const commaIndex = base64.indexOf(",");
+                        base64 = commaIndex >= 0 ? base64.slice(commaIndex + 1) : base64;
+                    }
+
+                    if (!base64 && attachment.url) {
+                        const resolvedUrl = applyTemplateParams(
+                            attachment.url,
+                            opts.params,
+                            encodeURIComponent
+                        );
+
+                        const resp = await axiosLib.get<ArrayBuffer>(resolvedUrl, {
+                            timeout: HTTP_TIMEOUT_MS,
+                            responseType: "arraybuffer",
+                        });
+                        contentBuffer = Buffer.from(resp.data);
+                        base64 = contentBuffer.toString("base64");
+                    }
+
+                    if (!base64) {
+                        throw new Error(`mail(): attachment '${attachment.filename}' требует url или base64`);
+                    }
+
+                    if (!contentBuffer) {
+                        contentBuffer = Buffer.from(base64, "base64");
+                    }
+
+                    return {
+                        filename: attachment.filename,
+                        base64,
+                        contentBuffer,
+                    };
+                })
+            );
 
             const recipients = Array.isArray(opts.mail) ? opts.mail : [opts.mail];
             const senderEmail = account.alias?.trim() || account.login;
@@ -214,6 +278,13 @@ export async function runScript(
                                         },
                                         subject: opts.theme,
                                         html,
+                                        ...(resolvedAttachments.length > 0
+                                            ? {
+                                                attachments: resolvedAttachments.map((attachment) => ({
+                                                    [attachment.filename]: attachment.base64,
+                                                })),
+                                            }
+                                            : {}),
                                     },
                                 },
                                 {
@@ -249,6 +320,14 @@ export async function runScript(
                         to: recipients.join(", "),
                         subject: opts.theme,
                         html,
+                        ...(resolvedAttachments.length > 0
+                            ? {
+                                attachments: resolvedAttachments.map((attachment) => ({
+                                    filename: attachment.filename,
+                                    content: attachment.contentBuffer,
+                                })),
+                            }
+                            : {}),
                     })
                 );
             }
