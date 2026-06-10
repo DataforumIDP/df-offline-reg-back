@@ -7,7 +7,7 @@ import { emailAccountsDAL } from "../dal/emailAccountsDAL";
 const SCRIPT_TIMEOUT_MS = 15000;
 const MEMORY_LIMIT_MB = 8;
 const HTTP_TIMEOUT_MS = 8000;
-const MAIL_QUEUE_RPS = 5;
+const MAIL_QUEUE_RPS = 0.5;
 const MAIL_QUEUE_INTERVAL_MS = Math.ceil(1000 / MAIL_QUEUE_RPS);
 
 type MailQueueTask = {
@@ -22,7 +22,7 @@ let mailQueueTimer: ReturnType<typeof setInterval> | null = null;
 function startMailQueueProcessor() {
     if (mailQueueTimer) return;
 
-    // Один запуск каждые 200мс => максимум 5 стартов отправки в секунду (FIFO)
+    // Один запуск каждые 2000мс => максимум 0.5 стартов отправки в секунду (FIFO)
     mailQueueTimer = setInterval(() => {
         const task = mailQueue.shift();
         if (!task) return;
