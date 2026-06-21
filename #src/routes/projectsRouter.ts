@@ -8,7 +8,6 @@ import { printTemplateService } from "../services/printTemplateService";
 import { webhookService } from "../services/webhookService";
 import { scannersDAL } from "../dal/scannersDAL";
 import { deviceJournalService } from "../services/deviceJournalService";
-import { db } from "../config/db";
 import {
     getJournalMiddlewares,
     getJournalStatsMiddlewares,
@@ -51,6 +50,7 @@ import {
     removeTemplateMiddlewares,
     getProjectTemplateMiddlewares,
 } from "../middlewares/printTemplateMiddlewares";
+import { projectScriptsService } from "../services/projectScriptsService";
 
 export const projectsRouter = Router();
 
@@ -81,39 +81,9 @@ projectsRouter.delete("/:projectId/print-template", removeTemplateMiddlewares, p
 // ===== Роуты webhooks проекта =====
 projectsRouter.get("/:projectId/webhooks", getSchemeMiddlewares, webhookService.getByProject);
 
-// TODO: Вынести код в отдельный файл и вместо try/catch использовать wrap
-
 // ===== Скрипты проекта (пре/постскрипт применяются ко всем видам регистрации) =====
-projectsRouter.get("/:projectId/scripts", getSchemeMiddlewares, async (req: Request, res: Response) => {
-    try {
-        const projectId = Number(req.params.projectId);
-        const row = await db("projects").where({ id: projectId }).first("pre_script", "post_script");
-        res.json({ preScript: row?.pre_script ?? null, postScript: row?.post_script ?? null });
-    } catch (err) {
-        res.status(500).json({ errors: { db: "Ошибка получения скриптов" } });
-    }
-});
-projectsRouter.put("/:projectId/scripts", getSchemeMiddlewares, async (req: Request, res: Response) => {
-    try {
-        const projectId = Number(req.params.projectId);
-        const { preScript, postScript } = req.body;
-        if (preScript !== undefined && preScript !== null && typeof preScript !== "string") {
-            return res.status(400).json({ errors: { preScript: "preScript должен быть строкой или null" } });
-        }
-        if (postScript !== undefined && postScript !== null && typeof postScript !== "string") {
-            return res.status(400).json({ errors: { postScript: "postScript должен быть строкой или null" } });
-        }
-        await db("projects").where({ id: projectId }).update({
-            pre_script: preScript ?? null,
-            post_script: postScript ?? null,
-            updated_at: db.fn.now(),
-        });
-        const row = await db("projects").where({ id: projectId }).first("pre_script", "post_script");
-        res.json({ preScript: row?.pre_script ?? null, postScript: row?.post_script ?? null });
-    } catch (err) {
-        res.status(500).json({ errors: { db: "Ошибка сохранения скриптов" } });
-    }
-});
+projectsRouter.get("/:projectId/scripts", getSchemeMiddlewares, projectScriptsService.get);
+projectsRouter.put("/:projectId/scripts", getSchemeMiddlewares, projectScriptsService.update);
 
 // ===== Поиск участника по коду =====
 projectsRouter.get("/:projectId/code/:code", findByCodeMiddlewares, participantCode.findByCode);
@@ -152,8 +122,8 @@ projectsRouter.get("/:projectId/devices", getSchemeMiddlewares, async (req: Requ
     );
 });
 
-projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExportService.exportScansToExcel);
-projectsRouter.post("/:projectId/scanners/logs/mass", exportMassScansMiddlewares, scanExportService.exportMassScansToExcel);
+projectsRouter.post("/:projectId/scans/excel", exportScansMiddlewares, scanExportService.exportScansToExcel.bind(scanExportService));
+projectsRouter.post("/:projectId/scanners/logs/mass", exportMassScansMiddlewares, scanExportService.exportMassScansToExcel.bind(scanExportService));
 
 // ===== Роуты участников проекта =====
 projectsRouter.get("/:projectId/participants", getParticipantsMiddlewares, participant.getAll);
