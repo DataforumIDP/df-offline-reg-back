@@ -19,6 +19,7 @@ export interface ProjectFieldConfig {
     type: ProjectFieldType;
     uniq: boolean;
     optional: boolean; // true = необязательное поле, false = обязательное
+    showInScanner?: boolean; // true = показывать поле в сканере (режим просмотра/отметки/журнал)
     /** Значение по умолчанию для необязательных полей */
     defaultValue?: any | null;
     maxLength?: number;
@@ -77,6 +78,10 @@ export class ProjectFieldHelper {
 
         if (typeof config.optional !== 'boolean') {
             return { valid: false, error: 'Поле optional должно быть boolean' };
+        }
+
+        if (config.showInScanner !== undefined && typeof config.showInScanner !== 'boolean') {
+            return { valid: false, error: 'Поле showInScanner должно быть boolean' };
         }
 
         if (config.maxLength !== undefined && (typeof config.maxLength !== 'number' || config.maxLength < 1)) {
