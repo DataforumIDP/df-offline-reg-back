@@ -759,18 +759,23 @@ function validateRowData(
             case 'list':
                 if (config.listSettings) {
                     const allowedValues = config.listSettings.items.map(i => i.value);
+                    const hasWildcardValue = allowedValues.includes('_');
                     
                     if (config.listSettings.multiple) {
                         // Для множественного выбора - разбиваем строку по запятой
                         const values = String(value).split(',').map(v => v.trim()).filter(Boolean);
-                        const invalid = values.filter(v => !allowedValues.includes(v));
-                        if (invalid.length > 0) {
-                            errors.push({ row: rowNum, field: key, message: `${label}: недопустимые значения: ${invalid.join(', ')}` });
+                        if (!hasWildcardValue) {
+                            const invalid = values.filter(v => !allowedValues.includes(v));
+                            if (invalid.length > 0) {
+                                errors.push({ row: rowNum, field: key, message: `${label}: недопустимые значения: ${invalid.join(', ')}` });
+                            } else {
+                                data[key] = values;
+                            }
                         } else {
                             data[key] = values;
                         }
                     } else {
-                        if (!allowedValues.includes(String(value))) {
+                        if (!hasWildcardValue && !allowedValues.includes(String(value))) {
                             errors.push({ row: rowNum, field: key, message: `${label}: допустимо: ${allowedValues.join(', ')}` });
                         }
                     }

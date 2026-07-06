@@ -237,19 +237,22 @@ function validateFieldValue(
             }
 
             const allowedValues = config.listSettings.items.map(item => item.value);
+            const hasWildcardValue = allowedValues.includes('_');
 
             if (config.listSettings.multiple) {
                 // Множественный выбор - должен быть массив
                 if (!Array.isArray(value)) {
                     return `Поле "${label}" должно быть массивом`;
                 }
-                const invalidValues = value.filter(v => !allowedValues.includes(v));
-                if (invalidValues.length > 0) {
-                    return `Поле "${label}" содержит недопустимые значения: ${invalidValues.join(', ')}`;
+                if (!hasWildcardValue) {
+                    const invalidValues = value.filter(v => !allowedValues.includes(v));
+                    if (invalidValues.length > 0) {
+                        return `Поле "${label}" содержит недопустимые значения: ${invalidValues.join(', ')}`;
+                    }
                 }
             } else {
                 // Одиночный выбор
-                if (!allowedValues.includes(value)) {
+                if (!hasWildcardValue && !allowedValues.includes(value)) {
                     return `Недопустимое значение поля "${label}". Доступные: ${allowedValues.join(', ')}`;
                 }
             }
