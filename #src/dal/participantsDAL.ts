@@ -34,8 +34,8 @@ export class ParticipantsDAL extends BaseDAL {
     async getMaxIdFieldValue(projectId: number, fieldKey: string): Promise<number> {
         const result = await this.db<Participant>(this.tableName)
             .where({ project_id: projectId, is_delete: false })
-            .whereRaw(`data->>'${fieldKey}' IS NOT NULL`)
-            .select(this.db.raw(`MAX((data->>'${fieldKey}')::int) as max_val`))
+            .whereRaw(`data->>? IS NOT NULL`, [fieldKey])
+            .select(this.db.raw(`MAX((data->>?)::int) as max_val`, [fieldKey]))
             .first();
         return (result as any)?.max_val || 0;
     }
@@ -51,7 +51,7 @@ export class ParticipantsDAL extends BaseDAL {
     ): Promise<boolean> {
         let query = this.db<Participant>(this.tableName)
             .where({ project_id: projectId, is_delete: false })
-            .whereRaw(`data->>'${fieldKey}' = ?`, [String(value)]);
+            .whereRaw(`data->>? = ?`, [fieldKey, String(value)]);
 
         if (excludeId) {
             query = query.whereNot({ id: excludeId });
@@ -65,7 +65,7 @@ export class ParticipantsDAL extends BaseDAL {
     async isValueUnique(projectId: number, fieldKey: string, value: string): Promise<boolean> {
         const result = await this.db(this.tableName)
             .where({ project_id: projectId, is_delete: false })
-            .whereRaw(`data->>'${fieldKey}' = ?`, [value])
+            .whereRaw(`data->>? = ?`, [fieldKey, value])
             .count();
         return parseInt(String(result[0].count), 10) === 0;
     }
@@ -145,13 +145,6 @@ export class ParticipantsDAL extends BaseDAL {
             const { sql, params } = buildSearchSQL(searchParsed);
 
             // Отладка: выводим сгенерированный SQL
-            console.log('[Search Debug]', {
-                originalQuery: query.search,
-                parsed: JSON.stringify(searchParsed, null, 2),
-                sql,
-                params
-            });
-
             if (sql) {
                 // Устанавливаем порог схожести для триграмм (0.2 = 20% схожести)
                 // Более низкий порог позволяет находить слова с бóльшим количеством опечаток
@@ -175,20 +168,6 @@ export class ParticipantsDAL extends BaseDAL {
         if (useRelevanceSort && searchParsed) {
             const { sql: relevanceSql, params: relevanceParams } = buildRelevanceSQL(searchParsed);
             if (relevanceSql !== '0') {
-                // DEBUG: Выводим баллы релевантности для первых 10 записей
-                const debugQuery = baseQuery.clone()
-                    .select('id', 'data')
-                    .select(this.db.raw(`${relevanceSql} as relevance_score`, relevanceParams))
-                    .orderByRaw(`${relevanceSql} DESC`, relevanceParams)
-                    .limit(10);
-                const debugResults = await debugQuery;
-                console.log('[Relevance Debug] Top 10 scores:');
-                debugResults.forEach((r: any, i: number) => {
-                    const name = r.data?.name || r.data?.firstName || 'N/A';
-                    const surname = r.data?.surname || r.data?.lastName || r.data?.name2 || '';
-                    console.log(`  ${i + 1}. ID=${r.id}, Score=${r.relevance_score}, Name="${name} ${surname}"`);
-                });
-                
                 // Сортировка по релевантности (DESC - более релевантные первыми)
                 recordsQuery = recordsQuery.orderByRaw(`${relevanceSql} DESC`, relevanceParams);
             }
@@ -440,13 +419,15 @@ export class ParticipantsDAL extends BaseDAL {
         let query = this.db<Participant>(this.tableName)
             .where({ project_id: projectId, is_delete: false });
 
-        // Добавляем условие поиска по любому из полей
+        // Добавляем условие поиска по любому из полей.
+        // Ключ поля передаём как параметр (data->>?), а не строковой интерполяцией -
+        // это безопасно (нет риска SQL-инъекции) и корректно работает с любыми
+        // именами ключей, включая кириллицу и пробелы (например "QR код"),
+        // которые раньше отсекались проверкой по regex [a-zA-Z0-9_] и молча
+        // выпадали из условия поиска.
         query = query.where(function() {
             for (const fieldKey of codeFieldKeys) {
-                // Безопасность: проверяем формат ключа
-                if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(fieldKey)) {
-                    this.orWhereRaw(`data->>'${fieldKey}' = ?`, [code]);
-                }
+                this.orWhereRaw(`data->>? = ?`, [fieldKey, code]);
             }
         });
 

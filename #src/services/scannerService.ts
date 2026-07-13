@@ -8,6 +8,7 @@ import { ProjectFieldsDAL } from "../dal/projectFieldsDAL";
 import { ProjectFieldHelper } from "../models/projectFields";
 import { ParticipantsDAL } from "../dal/participantsDAL";
 import { ParticipantHelper } from "../models/participants";
+import { participantLogsDAL } from "../dal/participantLogsDAL";
 import { dbError } from "../utils/errors";
 import { wrap } from "../utils/wrap";
 import { response201 } from "../utils/responses";
@@ -335,6 +336,17 @@ export class ScannerService {
         if (updateErr || !updated) {
             return dbError(res, "#SCANNER_MARK3");
         }
+
+        // Записываем в лог отметку, сделанную сканером - иначе такие изменения
+        // выпадают из статистики (она считает только записи из participant_logs)
+        await participantLogsDAL.create({
+            projectId: project.id,
+            participantId: updated.id,
+            action: "UPDATE",
+            actor: "SCANNER",
+            userId: null,
+            currentData: updated.data,
+        });
 
         res.json({
             message: "Участник отмечен",

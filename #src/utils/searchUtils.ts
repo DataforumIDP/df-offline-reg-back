@@ -129,27 +129,25 @@ export function buildConditionSQL(condition: SearchCondition): { sql: string; pa
     const params: (string | number)[] = [];
     const sqlParts: string[] = [];
 
-    // Для триграммного поиска: проверяем каждое значение в JSONB отдельно
-    const trigramExistsExpr = `EXISTS (SELECT 1 FROM jsonb_each_text(data) jt WHERE jt.value % ?)`;
-
-    // Поиск по всем полям
-    // ILIKE по сырому JSON
-    sqlParts.push(`(data::text ILIKE ?)`);
+    // Поиск по всем полям сразу через "плоский" столбец search_text
+    // (поддерживается GIN-индексом gin_trgm_ops - в отличие от data::text,
+    // здесь ILIKE '%...%' и триграммный оператор `%` реально используют индекс)
+    sqlParts.push(`(search_text ILIKE ?)`);
     params.push(`%${condition.value}%`);
 
     // Добавляем поиск с конвертированной раскладкой
     if (condition.convertedValue !== condition.value) {
-        sqlParts.push(`(data::text ILIKE ?)`);
+        sqlParts.push(`(search_text ILIKE ?)`);
         params.push(`%${condition.convertedValue}%`);
     }
 
-    // Триграммный поиск - проверяем каждое значение JSONB отдельно
-    sqlParts.push(`(${trigramExistsExpr})`);
+    // Триграммный (нечёткий) поиск - индексируемый оператор `%`
+    sqlParts.push(`(search_text % ?)`);
     params.push(condition.value);
 
-    // Поиск по цифрам (для телефонов)
+    // Поиск по цифрам (для телефонов) - тоже индексируемый столбец
     if (condition.digitsOnly && condition.digitsOnly.length >= 4) {
-        sqlParts.push(`(extract_digits(data::text) LIKE ?)`);
+        sqlParts.push(`(search_digits ILIKE ?)`);
         params.push(`%${condition.digitsOnly}%`);
     }
 
@@ -219,8 +217,8 @@ export function buildRelevanceSQL(parsed: ParsedSearch): { sql: string; params: 
             relevanceParts.push(`COALESCE((SELECT COUNT(*) * 50 FROM jsonb_each_text(data) jt WHERE jt.value ILIKE ?), 0)`);
             allParams.push(`%${condition.value}%`);
 
-            // Совпадение в JSON как тексте = 20 баллов (запасной)
-            relevanceParts.push(`CASE WHEN data::text ILIKE ? THEN 20 ELSE 0 END`);
+            // Совпадение в объединённом тексте = 20 баллов (запасной)
+            relevanceParts.push(`CASE WHEN search_text ILIKE ? THEN 20 ELSE 0 END`);
             allParams.push(`%${condition.value}%`);
 
             // Совпадение с конвертированной раскладкой
@@ -234,14 +232,14 @@ export function buildRelevanceSQL(parsed: ParsedSearch): { sql: string; params: 
                 allParams.push(`%${condition.convertedValue}%`);
             }
 
-            // Триграммная релевантность = максимальная similarity (0-1) * 5
+            // Триграммная релевантность = similarity (0-1) * 5 по объединённому тексту
             // Имеет малый вес, чтобы не перебивать точные совпадения
-            relevanceParts.push(`COALESCE((SELECT MAX(similarity(jt.value, ?)) * 5 FROM jsonb_each_text(data) jt), 0)`);
+            relevanceParts.push(`COALESCE(similarity(search_text, ?) * 5, 0)`);
             allParams.push(condition.value);
 
             // Совпадение цифр телефона = 30 баллов
             if (condition.digitsOnly && condition.digitsOnly.length >= 4) {
-                relevanceParts.push(`CASE WHEN extract_digits(data::text) LIKE ? THEN 30 ELSE 0 END`);
+                relevanceParts.push(`CASE WHEN search_digits ILIKE ? THEN 30 ELSE 0 END`);
                 allParams.push(`%${condition.digitsOnly}%`);
             }
         }

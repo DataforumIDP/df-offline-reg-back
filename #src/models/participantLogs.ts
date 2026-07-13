@@ -1,5 +1,5 @@
 export type LogAction = "CREATE" | "UPDATE" | "DELETE" | "PRINT";
-export type LogActor = "USER" | "WEBHOOK" | "AUTO";
+export type LogActor = "USER" | "WEBHOOK" | "AUTO" | "SCANNER";
 
 export interface ParticipantLog {
     id: number;
