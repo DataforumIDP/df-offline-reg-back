@@ -24,6 +24,10 @@ export interface Project {
     dateEnd: Date;
     isOperatorEditable: boolean;
     colorRow: boolean;
+    repeatPrintEnabled: boolean;
+    repeat_print_enabled?: boolean;
+    repeatPrintCount: number;
+    repeat_print_count?: number;
     rulesField: string | null;
     rules_field?: string | null;
     scanMode: ScanMode;
@@ -50,6 +54,8 @@ export class ProjectHelper {
             dateEnd: project.dateEnd,
             isOperatorEditable: project.isOperatorEditable,
             colorRow: project.colorRow ?? false,
+            repeatPrintEnabled: project.repeatPrintEnabled ?? project.repeat_print_enabled ?? false,
+            repeatPrintCount: project.repeatPrintCount ?? project.repeat_print_count ?? 1,
             rulesField: project.rulesField ?? project.rules_field ?? null,
             scanMode: project.scanMode ?? project.scan_mode ?? 'base',
             scanAction: project.scanAction ?? project.scan_action ?? null,

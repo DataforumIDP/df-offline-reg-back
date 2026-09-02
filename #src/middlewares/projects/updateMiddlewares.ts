@@ -1,4 +1,4 @@
-import { param, body } from "express-validator";
+﻿import { param, body } from "express-validator";
 import { Request, Response, NextFunction } from "express";
 import { authenticateJWT } from "../common/authMiddleware";
 import { roleCheck } from "../common/roleCaheck";
@@ -22,6 +22,11 @@ const dateEndValidation = body("dateEnd")
     .isISO8601()
     .withMessage("Некорректный формат даты окончания");
 
+const repeatPrintCountValidation = body("repeatPrintCount")
+    .optional()
+    .isInt({ min: 1, max: 10 })
+    .withMessage("Количество печатей должно быть числом от 1 до 10");
+
 // Middleware для фильтрации полей и преобразования дат
 const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
     const data: any = filteredObjectByKeys(req.body, [
@@ -32,6 +37,8 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
         "dateEnd",
         "isOperatorEditable",
         "colorRow",
+        "repeatPrintEnabled",
+        "repeatPrintCount",
         "rulesField",
         "scanMode",
         "scanAction",
@@ -42,6 +49,17 @@ const processUpdateData = (req: Request, res: Response, next: NextFunction) => {
     // Преобразуем даты в Date объекты если они есть
     if (data.dateStart) data.dateStart = new Date(data.dateStart);
     if (data.dateEnd) data.dateEnd = new Date(data.dateEnd);
+
+    // Преобразуем настройки многоразовой печати для БД
+    if ('repeatPrintEnabled' in data) {
+        data.repeat_print_enabled = data.repeatPrintEnabled;
+        delete data.repeatPrintEnabled;
+    }
+
+    if ('repeatPrintCount' in data) {
+        data.repeat_print_count = Number(data.repeatPrintCount);
+        delete data.repeatPrintCount;
+    }
 
     // Преобразуем rulesField в rules_field для БД
     if ('rulesField' in data) {
@@ -118,6 +136,7 @@ export const updateMiddlewares = [
     idValidate,
     dateStartValidation,
     dateEndValidation,
+    repeatPrintCountValidation,
     inputValidationMiddleware,
     existsEntity({ tableName: "projects", entityKey: "project" }),
     processUpdateData,
