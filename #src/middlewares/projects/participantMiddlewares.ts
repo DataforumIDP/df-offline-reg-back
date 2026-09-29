@@ -37,8 +37,8 @@ const pageQuery = query("page")
 
 const limitQuery = query("limit")
     .optional()
-    .isInt({ min: 1, max: 100 })
-    .withMessage("Лимит должен быть от 1 до 100");
+    .isInt({ min: 1, max: 10000 })
+    .withMessage("Лимит должен быть от 1 до 10000");
 
 const directionQuery = query("direction")
     .optional()
