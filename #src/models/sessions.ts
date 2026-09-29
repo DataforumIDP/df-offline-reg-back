@@ -1,5 +1,5 @@
 import * as crypto from 'crypto';
-import { UAParser } from 'ua-parser-js';
+import { parseUserAgent } from '../utils/parseUserAgent';
 
 export interface Session {
     id: number;
@@ -54,24 +54,23 @@ export class SessionHelper {
      */
     static parseDeviceName(userAgent: string | undefined): string | null {
         if (!userAgent) return null;
-        
-        const parser = new UAParser(userAgent);
-        const result = parser.getResult();
-        
+
+        const { browser, os, deviceModel } = parseUserAgent(userAgent);
+
         const parts: string[] = [];
-        
-        if (result.browser.name) {
-            parts.push(result.browser.name);
+
+        if (browser) {
+            parts.push(browser);
         }
-        
-        if (result.os.name) {
-            parts.push(result.os.name + (result.os.version ? ` ${result.os.version}` : ''));
+
+        if (os) {
+            parts.push(os);
         }
-        
-        if (result.device.model) {
-            parts.push(result.device.model);
+
+        if (deviceModel) {
+            parts.push(deviceModel);
         }
-        
+
         return parts.length > 0 ? parts.join(' / ') : 'Unknown Device';
     }
 

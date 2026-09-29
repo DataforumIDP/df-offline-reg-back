@@ -15,6 +15,11 @@ import { db } from "../config/db";
 
 const participantDAL = new ParticipantsDAL();
 const fieldDAL = new ProjectFieldsDAL();
+const MOSCOW_UTC_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+function toMoscowExcelDate(date: Date): Date {
+    return new Date(date.getTime() + MOSCOW_UTC_OFFSET_MS);
+}
 
 export class ParticipantService {
     /**
@@ -595,7 +600,7 @@ export class ParticipantService {
         let rowsData = participants.map((p: any) => {
             const row: Record<string, any> = {
                 _id: p.id,
-                _created_at: p.created_at,
+                _created_at: toMoscowExcelDate(p.created_at),
             };
             
             // Форматируем телефоны для экспорта
@@ -617,7 +622,8 @@ export class ParticipantService {
             }
 
             if (includeFirstPrint && firstPrintTimes) {
-                row._first_print_at = firstPrintTimes.get(p.id) ?? null;
+                const firstPrintAt = firstPrintTimes.get(p.id);
+                row._first_print_at = firstPrintAt ? toMoscowExcelDate(firstPrintAt) : null;
             }
             
             return row;
@@ -633,9 +639,10 @@ export class ParticipantService {
             worksheet.addRow(row);
         }
 
-        // Форматируем колонку с датой первой печати как дата-время
-        if (includeFirstPrint) {
-            const col = worksheet.getColumn('_first_print_at');
+        // Форматируем системные временные метки как дата-время
+        const dateTimeColumns = ['_created_at', ...(includeFirstPrint ? ['_first_print_at'] : [])];
+        for (const columnKey of dateTimeColumns) {
+            const col = worksheet.getColumn(columnKey);
             col.eachCell({ includeEmpty: false }, (cell, rowNumber) => {
                 if (rowNumber > 1 && cell.value instanceof Date) {
                     cell.numFmt = 'dd.mm.yyyy hh:mm:ss';

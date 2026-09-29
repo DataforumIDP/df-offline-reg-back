@@ -31,7 +31,7 @@ const codeParam = param("code")
     .notEmpty().withMessage("Код обязателен");
 
 const pageQuery = query("page").optional().isInt({ min: 1 }).withMessage("Некорректный номер страницы");
-const limitQuery = query("limit").optional().isInt({ min: 1, max: 100 }).withMessage("Лимит от 1 до 100");
+const limitQuery = query("limit").optional().isInt({ min: 1, max: 10000 }).withMessage("Лимит от 1 до 10000");
 const directionQuery = query("direction").optional().isIn(["ASC", "DESC", "asc", "desc"]).withMessage("Некорректное направление");
 
 // Все маршруты в этом роутере требуют сервисный токен
