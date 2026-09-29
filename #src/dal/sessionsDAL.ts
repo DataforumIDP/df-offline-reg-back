@@ -1,6 +1,8 @@
 import { BaseDAL } from "./_baseDAL";
 import { Session } from "../models/sessions";
 
+export const SESSION_INACTIVITY_LIMIT_MS = 7 * 24 * 60 * 60 * 1000;
+
 export class SessionsDAL extends BaseDAL {
     constructor() {
         super('sessions');
@@ -40,6 +42,8 @@ export class SessionsDAL extends BaseDAL {
      * Используется для переиспользования сессии при повторном входе с того же устройства.
      */
     async findActiveByDeviceAndAccount(deviceId: string, accountId: number): Promise<Session | null> {
+        await this.deactivateInactiveByAccountId(accountId);
+
         const session = await this.db(this.tableName)
             .where({ device_id: deviceId, account_id: accountId, is_active: true })
             .where('expires_at', '>', new Date())
@@ -72,20 +76,46 @@ export class SessionsDAL extends BaseDAL {
     async findByTokenHash(tokenHash: string): Promise<Session | null> {
         const session = await this.db(this.tableName)
             .where({ token_hash: tokenHash, is_active: true })
-            .where('expires_at', '>', new Date())
             .first();
+
+        if (!session) {
+            return null;
+        }
+
+        if (Date.now() - new Date(session.last_activity).getTime() >= SESSION_INACTIVITY_LIMIT_MS) {
+            await this.deactivate(session.id);
+            return null;
+        }
+
+        if (new Date(session.expires_at) <= new Date()) {
+            return null;
+        }
         
-        return session || null;
+        return session;
     }
 
     /**
      * Получает все активные сессии пользователя
      */
     async getActiveByAccountId(accountId: number): Promise<Session[]> {
+        await this.deactivateInactiveByAccountId(accountId);
+
         return this.db(this.tableName)
             .where({ account_id: accountId, is_active: true })
             .where('expires_at', '>', new Date())
             .orderBy('last_activity', 'desc');
+    }
+
+    /**
+     * Деактивирует сессии аккаунта без активности в течение семи дней
+     */
+    async deactivateInactiveByAccountId(accountId: number): Promise<number> {
+        const inactiveBefore = new Date(Date.now() - SESSION_INACTIVITY_LIMIT_MS);
+
+        return this.db(this.tableName)
+            .where({ account_id: accountId, is_active: true })
+            .where('last_activity', '<=', inactiveBefore)
+            .update({ is_active: false });
     }
 
     /**

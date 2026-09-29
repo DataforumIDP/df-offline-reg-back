@@ -5,7 +5,7 @@ import { wrap } from "../../utils/wrap";
 import {Account} from "../../models/accounts";
 import { JWT } from "../../utils/JWTutils";
 import { AccountsDAL } from "../../dal/accountsDAL";
-import { sessionsDAL } from "../../dal/sessionsDAL";
+import { sessionsDAL, SESSION_INACTIVITY_LIMIT_MS } from "../../dal/sessionsDAL";
 
 /**
  * Middleware для проверки JWT авторизации.
@@ -47,6 +47,11 @@ export const authenticateJWT = (required: boolean = true) => {
                 const [session] = await wrap(sessionsDAL.findByPk(sessionId));
 
                 if (!session || !session.is_active || session.account_id !== account.id || new Date(session.expires_at) <= new Date()) {
+                    return authError(res, "Сессия завершена. Войдите заново.");
+                }
+
+                if (Date.now() - new Date(session.last_activity).getTime() >= SESSION_INACTIVITY_LIMIT_MS) {
+                    await sessionsDAL.deactivate(session.id);
                     return authError(res, "Сессия завершена. Войдите заново.");
                 }
 
