@@ -1,49 +1,46 @@
-import ivm from "isolated-vm";
-import axiosLib from "axios";
-import nodemailer from "nodemailer";
-import ts from "typescript";
-import { emailAccountsDAL } from "../dal/emailAccountsDAL";
+import ivm from 'isolated-vm'
+import axiosLib from 'axios'
+import nodemailer from 'nodemailer'
+import ts from 'typescript'
+import { emailAccountsDAL } from '../dal/emailAccountsDAL'
 
-const SCRIPT_TIMEOUT_MS = 15000;
-const MEMORY_LIMIT_MB = 8;
-const HTTP_TIMEOUT_MS = 8000;
-const MAIL_QUEUE_RPS = 0.5;
-const MAIL_QUEUE_INTERVAL_MS = Math.ceil(1000 / MAIL_QUEUE_RPS);
+const SCRIPT_TIMEOUT_MS = 15000
+const MEMORY_LIMIT_MB = 8
+const HTTP_TIMEOUT_MS = 8000
+const MAIL_QUEUE_RPS = 0.5
+const MAIL_QUEUE_INTERVAL_MS = Math.ceil(1000 / MAIL_QUEUE_RPS)
 
 type MailQueueTask = {
-    run: () => Promise<any>;
-    resolve: (value: any) => void;
-    reject: (reason?: any) => void;
-};
+    run: () => Promise<any>
+    resolve: (value: any) => void
+    reject: (reason?: any) => void
+}
 
-const mailQueue: MailQueueTask[] = [];
-let mailQueueTimer: ReturnType<typeof setInterval> | null = null;
+const mailQueue: MailQueueTask[] = []
+let mailQueueTimer: ReturnType<typeof setInterval> | null = null
 
 function startMailQueueProcessor() {
-    if (mailQueueTimer) return;
+    if (mailQueueTimer) return
 
     // Один запуск каждые 2000мс => максимум 0.5 стартов отправки в секунду (FIFO)
     mailQueueTimer = setInterval(() => {
-        const task = mailQueue.shift();
-        if (!task) return;
+        const task = mailQueue.shift()
+        if (!task) return
 
-        void task
-            .run()
-            .then(task.resolve)
-            .catch(task.reject);
-    }, MAIL_QUEUE_INTERVAL_MS);
+        void task.run().then(task.resolve).catch(task.reject)
+    }, MAIL_QUEUE_INTERVAL_MS)
 
     // Не держим event loop живым, если больше ничего не выполняется
-    if (typeof (mailQueueTimer as any).unref === "function") {
-        (mailQueueTimer as any).unref();
+    if (typeof (mailQueueTimer as any).unref === 'function') {
+        ;(mailQueueTimer as any).unref()
     }
 }
 
 function enqueueMailTask<T>(run: () => Promise<T>): Promise<T> {
-    startMailQueueProcessor();
+    startMailQueueProcessor()
     return new Promise<T>((resolve, reject) => {
-        mailQueue.push({ run, resolve, reject });
-    });
+        mailQueue.push({ run, resolve, reject })
+    })
 }
 
 function applyTemplateParams(
@@ -51,16 +48,18 @@ function applyTemplateParams(
     params?: Record<string, string>,
     encodeValue?: (value: string) => string
 ): string {
-    if (!params || typeof params !== "object") {
-        return value;
+    if (!params || typeof params !== 'object') {
+        return value
     }
 
-    let result = value;
+    let result = value
     for (const [key, rawValue] of Object.entries(params)) {
-        const nextValue = String(rawValue ?? "");
-        result = result.split(key).join(encodeValue ? encodeValue(nextValue) : nextValue);
+        const nextValue = String(rawValue ?? '')
+        result = result
+            .split(key)
+            .join(encodeValue ? encodeValue(nextValue) : nextValue)
     }
-    return result;
+    return result
 }
 
 // Функция транслитерации — передаётся как исходный код внутрь изолята
@@ -82,9 +81,9 @@ function translitRuToEn(str) {
         return c;
     }).join('');
 }
-`;
+`
 
-export type ScriptOrigin = 'webhook' | 'excel' | 'form';
+export type ScriptOrigin = 'webhook' | 'excel' | 'form' | 'runtime'
 
 /**
  * Выполняет произвольный JS/TS-скрипт в изолированном V8 isolate.
@@ -97,7 +96,7 @@ export type ScriptOrigin = 'webhook' | 'excel' | 'form';
  *   data.utils.translitRuToEn(str) — транслитерация рус→лат
  *   data.utils.mail(opts) — отправка письма через сохранённый email-аккаунт
  *   data.utils.log(message, meta?) — лог в серверную консоль
- *   data.utils.origin — источник: 'webhook' | 'excel' | 'form'
+ *   data.utils.origin — источник: 'webhook' | 'excel' | 'form' | 'runtime'
  *
  * - Нет доступа к require, process, fs, глобальным объектам Node.
  * - Таймаут CPU: 2 секунды.
@@ -112,229 +111,284 @@ export async function runScript(
     origin: ScriptOrigin = 'form'
 ): Promise<Record<string, any>> {
     // Транспилируем TypeScript → JavaScript (убирает аннотации типов)
-    const jsCode = ts.transpileModule(scriptCode, {
-        compilerOptions: { target: ts.ScriptTarget.ES2020 },
-    }).outputText.trim();
+    const jsCode = ts
+        .transpileModule(scriptCode, {
+            compilerOptions: { target: ts.ScriptTarget.ES2020 },
+        })
+        .outputText.trim()
 
-    const isolate = new ivm.Isolate({ memoryLimit: MEMORY_LIMIT_MB });
+    const isolate = new ivm.Isolate({ memoryLimit: MEMORY_LIMIT_MB })
 
     try {
-        const context = await isolate.createContext();
-        const jail = context.global;
+        const context = await isolate.createContext()
+        const jail = context.global
 
         // Передаём пользовательские данные в изолят
         await jail.set(
-            "__userData__",
+            '__userData__',
             new ivm.ExternalCopy(data.user).copyInto()
-        );
-        await jail.set("__origin__", new ivm.ExternalCopy(origin).copyInto());
+        )
+        await jail.set('__origin__', new ivm.ExternalCopy(origin).copyInto())
 
         // Axios-прокси: вызывается из изолята, исполняется в хосте
-        const axiosFn = new ivm.Reference(async (
-            method: string,
-            url: string,
-            bodyStr: string | null,
-            configStr: string | null
-        ): Promise<string> => {
-            const body = bodyStr ? JSON.parse(bodyStr) : undefined;
-            const config = configStr ? JSON.parse(configStr) : {};
-            const res = await axiosLib({
-                method,
-                url,
-                data: body,
-                timeout: HTTP_TIMEOUT_MS,
-                ...config,
-            });
-            return JSON.stringify({
-                data: res.data,
-                status: res.status,
-                headers: res.headers,
-            });
-        });
-        await jail.set("__axiosFn__", axiosFn);
-
-        const logFn = new ivm.Reference(async (
-            message: string,
-            metaStr: string | null
-        ): Promise<string> => {
-            let meta: any = undefined;
-            if (metaStr) {
-                try {
-                    meta = JSON.parse(metaStr);
-                } catch {
-                    meta = metaStr;
+        const axiosFn = new ivm.Reference(
+            async (
+                method: string,
+                url: string,
+                bodyStr: string | null,
+                configStr: string | null
+            ): Promise<string> => {
+                if (origin === 'runtime') {
+                    throw new Error(
+                        'HTTP-запросы недоступны в runtime-скриптах'
+                    )
                 }
+                const body = bodyStr ? JSON.parse(bodyStr) : undefined
+                const config = configStr ? JSON.parse(configStr) : {}
+                const res = await axiosLib({
+                    method,
+                    url,
+                    data: body,
+                    timeout: HTTP_TIMEOUT_MS,
+                    ...config,
+                })
+                return JSON.stringify({
+                    data: res.data,
+                    status: res.status,
+                    headers: res.headers,
+                })
             }
-            if (meta !== undefined) {
-                console.log("[script]", message, meta);
-            } else {
-                console.log("[script]", message);
+        )
+        await jail.set('__axiosFn__', axiosFn)
+
+        const logFn = new ivm.Reference(
+            async (
+                message: string,
+                metaStr: string | null
+            ): Promise<string> => {
+                let meta: any = undefined
+                if (metaStr) {
+                    try {
+                        meta = JSON.parse(metaStr)
+                    } catch {
+                        meta = metaStr
+                    }
+                }
+                if (meta !== undefined) {
+                    console.log('[script]', message, meta)
+                } else {
+                    console.log('[script]', message)
+                }
+                return JSON.stringify({ ok: true })
             }
-            return JSON.stringify({ ok: true });
-        });
-        await jail.set("__logFn__", logFn);
+        )
+        await jail.set('__logFn__', logFn)
 
         // mail()-прокси: вызывается из изолята, исполняется в хосте
-        const mailFn = new ivm.Reference(async (optsStr: string): Promise<string> => {
-            const opts: {
-                slug: string;
-                mail: string | string[];
-                html: string;
-                theme: string;
-                params?: Record<string, string>;
-                attachments?: Array<{
-                    filename: string;
-                    url?: string;
-                    base64?: string;
-                }>;
-            } = JSON.parse(optsStr);
+        const mailFn = new ivm.Reference(
+            async (optsStr: string): Promise<string> => {
+                if (origin === 'runtime') {
+                    throw new Error(
+                        'Отправка почты недоступна в runtime-скриптах'
+                    )
+                }
+                const opts: {
+                    slug: string
+                    mail: string | string[]
+                    html: string
+                    theme: string
+                    params?: Record<string, string>
+                    attachments?: Array<{
+                        filename: string
+                        url?: string
+                        base64?: string
+                    }>
+                } = JSON.parse(optsStr)
 
-            const account = await emailAccountsDAL.getBySlug(opts.slug);
-            if (!account) throw new Error(`mail(): email-аккаунт '${opts.slug}' не найден`);
+                const account = await emailAccountsDAL.getBySlug(opts.slug)
+                if (!account)
+                    throw new Error(
+                        `mail(): email-аккаунт '${opts.slug}' не найден`
+                    )
 
-            // Получаем HTML — либо скачиваем по URL, либо используем как есть
-            let html = opts.html;
-            if (/^https?:\/\//i.test(html)) {
-                const resp = await axiosLib.get<string>(html, {
-                    timeout: HTTP_TIMEOUT_MS,
-                    responseType: "text",
-                });
-                html = resp.data;
-            }
+                // Получаем HTML — либо скачиваем по URL, либо используем как есть
+                let html = opts.html
+                if (/^https?:\/\//i.test(html)) {
+                    const resp = await axiosLib.get<string>(html, {
+                        timeout: HTTP_TIMEOUT_MS,
+                        responseType: 'text',
+                    })
+                    html = resp.data
+                }
 
-            // Подставляем параметры
-            html = applyTemplateParams(html, opts.params);
+                // Подставляем параметры
+                html = applyTemplateParams(html, opts.params)
 
-            const attachments = Array.isArray(opts.attachments) ? opts.attachments : [];
-            const resolvedAttachments = await Promise.all(
-                attachments.map(async (attachment) => {
-                    if (!attachment?.filename?.trim()) {
-                        throw new Error("mail(): attachment.filename обязателен");
-                    }
+                const attachments = Array.isArray(opts.attachments)
+                    ? opts.attachments
+                    : []
+                const resolvedAttachments = await Promise.all(
+                    attachments.map(async (attachment) => {
+                        if (!attachment?.filename?.trim()) {
+                            throw new Error(
+                                'mail(): attachment.filename обязателен'
+                            )
+                        }
 
-                    let base64 = attachment.base64?.trim() || "";
-                    let contentBuffer: Buffer | null = null;
+                        let base64 = attachment.base64?.trim() || ''
+                        let contentBuffer: Buffer | null = null
 
-                    if (base64.startsWith("data:")) {
-                        const commaIndex = base64.indexOf(",");
-                        base64 = commaIndex >= 0 ? base64.slice(commaIndex + 1) : base64;
-                    }
+                        if (base64.startsWith('data:')) {
+                            const commaIndex = base64.indexOf(',')
+                            base64 =
+                                commaIndex >= 0
+                                    ? base64.slice(commaIndex + 1)
+                                    : base64
+                        }
 
-                    if (!base64 && attachment.url) {
-                        const resolvedUrl = applyTemplateParams(
-                            attachment.url,
-                            opts.params,
-                            encodeURIComponent
-                        );
+                        if (!base64 && attachment.url) {
+                            const resolvedUrl = applyTemplateParams(
+                                attachment.url,
+                                opts.params,
+                                encodeURIComponent
+                            )
 
-                        const resp = await axiosLib.get<ArrayBuffer>(resolvedUrl, {
-                            timeout: HTTP_TIMEOUT_MS,
-                            responseType: "arraybuffer",
-                        });
-                        contentBuffer = Buffer.from(resp.data);
-                        base64 = contentBuffer.toString("base64");
-                    }
-
-                    if (!base64) {
-                        throw new Error(`mail(): attachment '${attachment.filename}' требует url или base64`);
-                    }
-
-                    if (!contentBuffer) {
-                        contentBuffer = Buffer.from(base64, "base64");
-                    }
-
-                    return {
-                        filename: attachment.filename,
-                        base64,
-                        contentBuffer,
-                    };
-                })
-            );
-
-            const recipients = Array.isArray(opts.mail) ? opts.mail : [opts.mail];
-            const senderEmail = account.alias?.trim() || account.login;
-            const fromAddress = account.from_name
-                ? `"${account.from_name}" <${senderEmail}>`
-                : senderEmail;
-
-            if (!senderEmail) {
-                throw new Error(`mail(): не задан sender email (login/alias) для аккаунта '${opts.slug}'`);
-            }
-
-            if ((account.provider ?? 'smtp') === 'rusender') {
-                // ── RuSender API ───────────────────────────────────────────
-                if (!account.api_key) throw new Error(`mail(): api_key не задан для аккаунта '${opts.slug}'`);
-                for (const recipient of recipients) {
-                    try {
-                        await enqueueMailTask(() =>
-                            axiosLib.post(
-                                'https://api.rusender.ru/api/v1/external-mails/send',
+                            const resp = await axiosLib.get<ArrayBuffer>(
+                                resolvedUrl,
                                 {
-                                    mail: {
-                                        to: { email: recipient },
-                                        from: {
-                                            email: senderEmail,
-                                            ...(account.from_name ? { name: account.from_name } : {}),
-                                        },
-                                        subject: opts.theme,
-                                        html,
-                                        ...(resolvedAttachments.length > 0
-                                            ? {
-                                                attachments: resolvedAttachments.map((attachment) => ({
-                                                    [attachment.filename]: attachment.base64,
-                                                })),
-                                            }
-                                            : {}),
-                                    },
-                                },
-                                {
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-Api-Key': account.api_key,
-                                    },
                                     timeout: HTTP_TIMEOUT_MS,
+                                    responseType: 'arraybuffer',
                                 }
                             )
-                        );
-                    } catch (err: any) {
-                        if (axiosLib.isAxiosError(err)) {
-                            const status = err.response?.status;
-                            const body = err.response?.data;
-                            throw new Error(`mail(): rusender error status=${status ?? 'unknown'} body=${JSON.stringify(body ?? err.message)}`);
+                            contentBuffer = Buffer.from(resp.data)
+                            base64 = contentBuffer.toString('base64')
                         }
-                        throw err;
-                    }
-                }
-            } else {
-                // ── SMTP via nodemailer ────────────────────────────────────
-                const transporter = nodemailer.createTransport({
-                    host: account.host!,
-                    port: account.port!,
-                    secure: account.secure!,
-                    auth: { user: account.login!, pass: account.password! },
-                });
 
-                await enqueueMailTask(() =>
-                    transporter.sendMail({
-                        from: fromAddress ?? account.login ?? undefined,
-                        to: recipients.join(", "),
-                        subject: opts.theme,
-                        html,
-                        ...(resolvedAttachments.length > 0
-                            ? {
-                                attachments: resolvedAttachments.map((attachment) => ({
-                                    filename: attachment.filename,
-                                    content: attachment.contentBuffer,
-                                })),
-                            }
-                            : {}),
+                        if (!base64) {
+                            throw new Error(
+                                `mail(): attachment '${attachment.filename}' требует url или base64`
+                            )
+                        }
+
+                        if (!contentBuffer) {
+                            contentBuffer = Buffer.from(base64, 'base64')
+                        }
+
+                        return {
+                            filename: attachment.filename,
+                            base64,
+                            contentBuffer,
+                        }
                     })
-                );
-            }
+                )
 
-            return JSON.stringify({ ok: true, recipients: recipients.length });
-        });
-        await jail.set("__mailFn__", mailFn);
+                const recipients = Array.isArray(opts.mail)
+                    ? opts.mail
+                    : [opts.mail]
+                const senderEmail = account.alias?.trim() || account.login
+                const fromAddress = account.from_name
+                    ? `"${account.from_name}" <${senderEmail}>`
+                    : senderEmail
+
+                if (!senderEmail) {
+                    throw new Error(
+                        `mail(): не задан sender email (login/alias) для аккаунта '${opts.slug}'`
+                    )
+                }
+
+                if ((account.provider ?? 'smtp') === 'rusender') {
+                    // ── RuSender API ───────────────────────────────────────────
+                    if (!account.api_key)
+                        throw new Error(
+                            `mail(): api_key не задан для аккаунта '${opts.slug}'`
+                        )
+                    for (const recipient of recipients) {
+                        try {
+                            await enqueueMailTask(() =>
+                                axiosLib.post(
+                                    'https://api.rusender.ru/api/v1/external-mails/send',
+                                    {
+                                        mail: {
+                                            to: { email: recipient },
+                                            from: {
+                                                email: senderEmail,
+                                                ...(account.from_name
+                                                    ? {
+                                                          name: account.from_name,
+                                                      }
+                                                    : {}),
+                                            },
+                                            subject: opts.theme,
+                                            html,
+                                            ...(resolvedAttachments.length > 0
+                                                ? {
+                                                      attachments:
+                                                          resolvedAttachments.map(
+                                                              (attachment) => ({
+                                                                  [attachment.filename]:
+                                                                      attachment.base64,
+                                                              })
+                                                          ),
+                                                  }
+                                                : {}),
+                                        },
+                                    },
+                                    {
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-Api-Key': account.api_key,
+                                        },
+                                        timeout: HTTP_TIMEOUT_MS,
+                                    }
+                                )
+                            )
+                        } catch (err: any) {
+                            if (axiosLib.isAxiosError(err)) {
+                                const status = err.response?.status
+                                const body = err.response?.data
+                                throw new Error(
+                                    `mail(): rusender error status=${status ?? 'unknown'} body=${JSON.stringify(body ?? err.message)}`
+                                )
+                            }
+                            throw err
+                        }
+                    }
+                } else {
+                    // ── SMTP via nodemailer ────────────────────────────────────
+                    const transporter = nodemailer.createTransport({
+                        host: account.host!,
+                        port: account.port!,
+                        secure: account.secure!,
+                        auth: { user: account.login!, pass: account.password! },
+                    })
+
+                    await enqueueMailTask(() =>
+                        transporter.sendMail({
+                            from: fromAddress ?? account.login ?? undefined,
+                            to: recipients.join(', '),
+                            subject: opts.theme,
+                            html,
+                            ...(resolvedAttachments.length > 0
+                                ? {
+                                      attachments: resolvedAttachments.map(
+                                          (attachment) => ({
+                                              filename: attachment.filename,
+                                              content: attachment.contentBuffer,
+                                          })
+                                      ),
+                                  }
+                                : {}),
+                        })
+                    )
+                }
+
+                return JSON.stringify({
+                    ok: true,
+                    recipients: recipients.length,
+                })
+            }
+        )
+        await jail.set('__mailFn__', mailFn)
 
         const wrappedCode = `
 (async function() {
@@ -379,29 +433,34 @@ export async function runScript(
     var __result__ = await __fn__(data);
     return JSON.stringify(__result__ !== undefined ? __result__ : __userData__);
 })();
-`;
+`
 
-        const script = await isolate.compileScript(wrappedCode);
+        const script = await isolate.compileScript(wrappedCode)
 
-        const resultRef = await script.run(context, {
+        const resultRef = (await script.run(context, {
             timeout: SCRIPT_TIMEOUT_MS,
             promise: true,
-        }) as ivm.Reference<string>;
+        })) as ivm.Reference<string>
 
-        const resultStr = resultRef instanceof ivm.Reference
-            ? await resultRef.copy()
-            : resultRef;
+        const resultStr =
+            resultRef instanceof ivm.Reference
+                ? await resultRef.copy()
+                : resultRef
 
-        const parsed = JSON.parse(resultStr as string);
+        const parsed = JSON.parse(resultStr as string)
 
-        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-            throw new Error("Скрипт должен возвращать объект");
+        if (
+            typeof parsed !== 'object' ||
+            parsed === null ||
+            Array.isArray(parsed)
+        ) {
+            throw new Error('Скрипт должен возвращать объект')
         }
 
-        return parsed;
+        return parsed
     } catch (err: any) {
-        throw new Error(err?.message ?? String(err));
+        throw new Error(err?.message ?? String(err))
     } finally {
-        isolate.dispose();
+        isolate.dispose()
     }
 }

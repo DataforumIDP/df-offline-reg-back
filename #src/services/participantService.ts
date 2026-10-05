@@ -236,6 +236,63 @@ export class ParticipantService {
     }
 
     /**
+     * POST /projects/:projectId/participants/bulk-delete
+     * Пакетное мягкое удаление участников с записью аудита
+     */
+    async deleteMany(req: Request, res: Response) {
+        const projectId = Number(req.params.projectId);
+        const userId = req.account?.id || null;
+        const participantIds = (req.body.participantIds as number[]).map(Number);
+
+        try {
+            const deletedCount = await db.transaction(async (trx) => {
+                const participants = await trx("participants")
+                    .where({ project_id: projectId, is_delete: false })
+                    .whereIn("id", participantIds)
+                    .select("id", "data")
+                    .forUpdate();
+
+                if (participants.length !== participantIds.length) {
+                    const error = new Error("Некоторые участники не найдены в этом проекте");
+                    error.name = "ParticipantsNotFoundError";
+                    throw error;
+                }
+
+                await trx("participants")
+                    .where({ project_id: projectId, is_delete: false })
+                    .whereIn("id", participantIds)
+                    .update({ is_delete: true, updated_at: trx.fn.now() });
+
+                const deleteLogs = participants.map((participant) => ({
+                        project_id: projectId,
+                        participant_id: participant.id,
+                        action: "DELETE",
+                        actor: "USER",
+                        user_id: userId,
+                        current_data: participant.data,
+                    }));
+                for (let offset = 0; offset < deleteLogs.length; offset += 1000) {
+                    await trx("participant_logs").insert(deleteLogs.slice(offset, offset + 1000));
+                }
+
+                return participants.length;
+            });
+
+            res.json({
+                success: true,
+                deleted: deletedCount,
+                message: `Удалено участников: ${deletedCount}`,
+            });
+        } catch (error) {
+            if (error instanceof Error && error.name === "ParticipantsNotFoundError") {
+                return res.status(404).json({ success: false, message: error.message });
+            }
+            console.error("[BULK DELETE PARTICIPANTS] Failed:", error);
+            return dbError(res, "#DELETEPARTICIPANTSBULK1");
+        }
+    }
+
+    /**
      * POST /projects/:projectId/participants/:participantId/print
      * Отметка о печати участника
      */

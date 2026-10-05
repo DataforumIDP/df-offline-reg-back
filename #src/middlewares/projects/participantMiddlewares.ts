@@ -331,6 +331,22 @@ export const deleteParticipantMiddlewares = [
     checkParticipantBelongsToProject,
 ];
 
+// POST /projects/:projectId/participants/bulk-delete - только админы
+export const deleteParticipantsBulkMiddlewares = [
+    authenticateJWT(true),
+    projectIdParam,
+    body("participantIds")
+        .isArray({ min: 1, max: 10000 })
+        .withMessage("Нужно передать от 1 до 10000 ID участников")
+        .custom((ids: unknown[]) =>
+            ids.every((id) => Number.isInteger(Number(id)) && Number(id) > 0) &&
+            new Set(ids.map(Number)).size === ids.length
+        )
+        .withMessage("ID участников должны быть уникальными положительными числами"),
+    inputValidationMiddleware,
+    checkProjectAccess(false),
+];
+
 // GET /projects/:projectId/participants/log - только админы
 export const getLogsMiddlewares = [
     authenticateJWT(true),

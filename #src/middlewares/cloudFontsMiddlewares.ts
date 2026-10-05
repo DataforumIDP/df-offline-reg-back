@@ -18,7 +18,7 @@ const fontIdParam = param("id")
     .withMessage("Некорректный ID шрифта");
 
 // GET /cloud-fonts
-export const getCloudFontsMiddlewares = [authenticateJWT(true), adminOnly];
+export const getCloudFontsMiddlewares = [authenticateJWT(true)];
 
 // POST /cloud-fonts
 export const createCloudFontMiddlewares = [authenticateJWT(true), adminOnly];
