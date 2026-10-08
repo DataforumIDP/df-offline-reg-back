@@ -85,6 +85,11 @@ function translitRuToEn(str) {
 
 export type ScriptOrigin = 'webhook' | 'excel' | 'form' | 'runtime'
 
+export type ScanEvent = {
+    zone: string | number
+    timestamp: number | string | Date
+}
+
 /**
  * Выполняет произвольный JS/TS-скрипт в изолированном V8 isolate.
  *
@@ -92,10 +97,12 @@ export type ScriptOrigin = 'webhook' | 'excel' | 'form' | 'runtime'
  *
  * Внутри скрипта доступны:
  *   data.user        — пользовательские данные
+ *   data.scans       — массив скан событий участника: [{zone, timestamp}, ...]
  *   data.utils.axios — HTTP-клиент (get/post/put/delete)
  *   data.utils.translitRuToEn(str) — транслитерация рус→лат
  *   data.utils.mail(opts) — отправка письма через сохранённый email-аккаунт
  *   data.utils.log(message, meta?) — лог в серверную консоль
+ *   data.utils.logger(text) — Markdown-лог runtime-запуска
  *   data.utils.origin — источник: 'webhook' | 'excel' | 'form' | 'runtime'
  *
  * - Нет доступа к require, process, fs, глобальным объектам Node.
@@ -107,8 +114,9 @@ export type ScriptOrigin = 'webhook' | 'excel' | 'form' | 'runtime'
  */
 export async function runScript(
     scriptCode: string,
-    data: { user: Record<string, any> },
-    origin: ScriptOrigin = 'form'
+    data: { user: Record<string, any>; scans?: ScanEvent[] },
+    origin: ScriptOrigin = 'form',
+    onRuntimeLog?: (text: string) => Promise<void>
 ): Promise<Record<string, any>> {
     // Транспилируем TypeScript → JavaScript (убирает аннотации типов)
     const jsCode = ts
@@ -123,10 +131,14 @@ export async function runScript(
         const context = await isolate.createContext()
         const jail = context.global
 
-        // Передаём пользовательские данные в изолят
+        // Передаём пользовательские данные и скан события в изолят
         await jail.set(
             '__userData__',
             new ivm.ExternalCopy(data.user).copyInto()
+        )
+        await jail.set(
+            '__scans__',
+            new ivm.ExternalCopy(data.scans ?? []).copyInto()
         )
         await jail.set('__origin__', new ivm.ExternalCopy(origin).copyInto())
 
@@ -183,6 +195,17 @@ export async function runScript(
             }
         )
         await jail.set('__logFn__', logFn)
+
+        const runtimeLoggerFn = new ivm.Reference(
+            async (text: string): Promise<string> => {
+                if (typeof text !== 'string') {
+                    throw new Error('logger(): ожидалась Markdown-строка')
+                }
+                await onRuntimeLog?.(text)
+                return JSON.stringify({ ok: true })
+            }
+        )
+        await jail.set('__runtimeLoggerFn__', runtimeLoggerFn)
 
         // mail()-прокси: вызывается из изолята, исполняется в хосте
         const mailFn = new ivm.Reference(
@@ -396,6 +419,7 @@ export async function runScript(
 
     var data = {
         user: __userData__,
+        scans: __scans__,
         utils: {
             translitRuToEn: translitRuToEn,
             axios: {
@@ -424,6 +448,15 @@ export async function runScript(
                 var r = await __logFn__.apply(null, [String(message), meta !== undefined ? JSON.stringify(meta) : null], { arguments: { copy: true }, result: { promise: true, copy: true } });
                 return JSON.parse(r);
             },
+            ...(__origin__ === 'runtime' ? {
+                logger: async function(text) {
+                    if (typeof text !== 'string') {
+                        throw new Error('logger(): ожидалась Markdown-строка');
+                    }
+                    var r = await __runtimeLoggerFn__.apply(null, [text], { arguments: { copy: true }, result: { promise: true, copy: true } });
+                    return JSON.parse(r);
+                },
+            } : {}),
             /** Источник регистрации: 'webhook' | 'excel' | 'form' */
             origin: __origin__,
         }

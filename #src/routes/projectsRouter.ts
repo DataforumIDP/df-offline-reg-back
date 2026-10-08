@@ -142,11 +142,23 @@ projectsRouter.put(
     requireAdminForRuntimeScriptUpdate,
     projectScriptsService.update
 )
+projectsRouter.get(
+    '/:projectId/scripts/runtime/runs',
+    getSchemeMiddlewares,
+    roleCheck(adminRoles),
+    projectScriptsService.getRuntimeRuns
+)
+projectsRouter.delete(
+    '/:projectId/scripts/runtime/runs',
+    getSchemeMiddlewares,
+    roleCheck(adminRoles),
+    projectScriptsService.clearRuntimeRuns
+)
 projectsRouter.post(
     '/:projectId/scripts/runtime/run',
     getSchemeMiddlewares,
     roleCheck(adminRoles),
-    projectScriptsService.runRuntime
+    projectScriptsService.runRuntime.bind(projectScriptsService)
 )
 
 // ===== Поиск участника по коду =====
