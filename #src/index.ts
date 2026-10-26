@@ -16,6 +16,7 @@ import { cloudFontsRouter } from "./routes/cloudFontsRouter";
 import { emailAccountsRouter } from "./routes/emailAccountsRouter";
 import { apiRouter } from "./routes/apiRouter";
 import { initQrAuthSocket } from "./services/qrAuthService";
+import { initOperatorControlSocket } from "./services/operatorControlSocket";
 
 const app = express();
 
@@ -85,7 +86,8 @@ async function expressTasks() {
     const server = createServer(app);
     
     // Инициализация Socket.IO для QR авторизации
-    initQrAuthSocket(server);
+    const io = initQrAuthSocket(server);
+    initOperatorControlSocket(io);
     
     return new Promise(resolve => server.listen(PORT, () => resolve(true)));
 }

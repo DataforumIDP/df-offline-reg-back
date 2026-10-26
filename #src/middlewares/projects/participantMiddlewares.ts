@@ -172,6 +172,9 @@ const validateParticipantData = (isUpdate: boolean = false) => {
                 if (!isUpdate && !config.optional) {
                     errors[key] = `Поле "${label}" обязательно для заполнения`;
                 }
+                if (isUpdate && value !== undefined) {
+                    validatedData[key] = value;
+                }
                 continue;
             }
 

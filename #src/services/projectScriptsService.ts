@@ -3,7 +3,7 @@ import { db } from '../config/db'
 import { dbError } from '../utils/errors'
 import { wrap } from '../utils/wrap'
 import { ReqWithBody, ReqWithParams } from '../baseTypes'
-import { runScript } from '../utils/scriptRunner'
+import { runScript, RuntimeLogEvent } from '../utils/scriptRunner'
 
 export class ProjectScriptsService {
     private async finishRuntimeRun(
@@ -188,6 +188,64 @@ export class ProjectScriptsService {
         const codeKeys = (codeFields ?? [])
             .filter((field) => field.config?.type === 'code')
             .map((field) => field.key)
+        const booleanKeys = (codeFields ?? [])
+            .filter((field) => field.config?.type === 'bool')
+            .map((field) => field.key)
+
+        const [eventRows, eventsErr] = await wrap(
+            db('participant_logs')
+                .select(
+                    'participant_id',
+                    'action',
+                    db.raw('created_at::date::text as event_date'),
+                    booleanKeys.length > 0
+                        ? db.raw(
+                              `COALESCE((
+                                  SELECT jsonb_agg(mark.key)
+                                  FROM jsonb_each(participant_logs.current_data) AS mark(key, value)
+                                  WHERE mark.key = ANY(?::text[])
+                                    AND mark.value = 'true'::jsonb
+                              ), '[]'::jsonb) as checked_fields`,
+                              [booleanKeys]
+                          )
+                        : db.raw("'[]'::jsonb as checked_fields")
+                )
+                .where({ project_id: projectId })
+                .whereIn('action', ['UPDATE', 'PRINT'])
+                .whereNotNull('participant_id')
+                .orderBy('created_at', 'asc')
+        )
+        if (eventsErr) {
+            const result = {
+                success: false,
+                processed: 0,
+                updated: 0,
+                error: 'Не удалось загрузить события обновления и печати',
+            }
+            if (!(await this.finishRuntimeRun(runId, 'failed', result, logs))) {
+                return dbError(res, '#SCRIPTS_RUNTIME_RUN5')
+            }
+            return dbError(res, '#SCRIPTS_RUNTIME7')
+        }
+
+        const logsByParticipant = new Map<number, RuntimeLogEvent[]>()
+        for (const row of eventRows ?? []) {
+            const participantId = Number(row.participant_id)
+            const participantLogs = logsByParticipant.get(participantId) ?? []
+            const checkedFields = Array.isArray(row.checked_fields)
+                ? row.checked_fields.filter(
+                      (field: unknown): field is string =>
+                          typeof field === 'string'
+                  )
+                : []
+            participantLogs.push({
+                action: row.action as RuntimeLogEvent['action'],
+                date: String(row.event_date),
+                checkedFields,
+            })
+            logsByParticipant.set(participantId, participantLogs)
+        }
+
         const participantCodes = new Map<string, Set<number>>()
         for (const participant of participants ?? []) {
             for (const key of codeKeys) {
@@ -260,6 +318,7 @@ export class ProjectScriptsService {
                     {
                         user: participant.data,
                         scans: scansByParticipant.get(participant.id) ?? [],
+                        logs: logsByParticipant.get(participant.id) ?? [],
                     },
                     'runtime',
                     async (text) => {

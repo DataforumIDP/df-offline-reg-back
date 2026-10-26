@@ -90,6 +90,12 @@ export type ScanEvent = {
     timestamp: number | string | Date
 }
 
+export type RuntimeLogEvent = {
+    action: 'UPDATE' | 'PRINT'
+    date: string
+    checkedFields: string[]
+}
+
 /**
  * Выполняет произвольный JS/TS-скрипт в изолированном V8 isolate.
  *
@@ -114,7 +120,11 @@ export type ScanEvent = {
  */
 export async function runScript(
     scriptCode: string,
-    data: { user: Record<string, any>; scans?: ScanEvent[] },
+    data: {
+        user: Record<string, any>
+        scans?: ScanEvent[]
+        logs?: RuntimeLogEvent[]
+    },
     origin: ScriptOrigin = 'form',
     onRuntimeLog?: (text: string) => Promise<void>
 ): Promise<Record<string, any>> {
@@ -139,6 +149,10 @@ export async function runScript(
         await jail.set(
             '__scans__',
             new ivm.ExternalCopy(data.scans ?? []).copyInto()
+        )
+        await jail.set(
+            '__logs__',
+            new ivm.ExternalCopy(data.logs ?? []).copyInto()
         )
         await jail.set('__origin__', new ivm.ExternalCopy(origin).copyInto())
 
@@ -420,6 +434,7 @@ export async function runScript(
     var data = {
         user: __userData__,
         scans: __scans__,
+        logs: __logs__,
         utils: {
             translitRuToEn: translitRuToEn,
             axios: {

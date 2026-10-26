@@ -167,7 +167,7 @@ export class ParticipantService {
     async update(req: Request, res: Response) {
         const projectId = Number(req.params.projectId);
         const participantId = Number(req.params.participantId);
-        let data = { ...req.body };
+        const patch = { ...req.body };
         const userId = req.account?.id || null;
 
         // Получаем схему проекта для нормализации телефонов
@@ -178,11 +178,15 @@ export class ParticipantService {
             if (role !== 'admin' && role !== 'superadmin') {
                 for (const field of fields) {
                     if ((field.config as any).isHidden) {
-                        delete data[field.key];
+                        delete patch[field.key];
                     }
                 }
             }
+        }
 
+        // PUT accepts partial data: preserve fields omitted by the caller.
+        let data = { ...req.participant!.data, ...patch };
+        if (fields) {
             const phoneFieldKeys = getPhoneFieldKeys(fields as any);
             data = normalizeParticipantPhones(data, phoneFieldKeys);
         }
