@@ -125,6 +125,7 @@ const checkParticipantBelongsToProject = async (req: Request, res: Response, nex
 /**
  * Валидация данных участника по схеме проекта
  * - Проверяет соответствие типам полей
+ * - Приводит числа к строке для строковых типов полей
  * - Генерирует значения для полей типа id
  * - Проверяет уникальность полей с uniq=true
  * - Проверяет значения list на вхождение в список
@@ -147,7 +148,7 @@ const validateParticipantData = (isUpdate: boolean = false) => {
 
         for (const field of fields) {
             const { key, label, config } = field;
-            const value = data[key];
+            const value = coerceToStringValue(data[key], config);
 
             // Обработка поля типа id - автогенерация
             if (config.type === 'id') {
@@ -209,6 +210,31 @@ const validateParticipantData = (isUpdate: boolean = false) => {
         next();
     };
 };
+
+/**
+ * Приведение значения к строке для строковых типов полей
+ *
+ * Числа в JSON приходят без кавычек (ИНН, номер, телефон), но в схеме проекта и в
+ * jsonb такие поля хранятся строками — иначе валидация отклоняет корректные данные,
+ * а поиск и уникальность не совпадают со строковыми значениями.
+ * Небесконечные числа и значения нестроковых типов (bool, list multiple) не приводим.
+ */
+function coerceToStringValue(value: unknown, config: ProjectFieldConfig): unknown {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return value;
+    }
+
+    switch (config.type) {
+        case 'text':
+        case 'code':
+        case 'img':
+            return String(value);
+        case 'list':
+            return config.listSettings?.multiple ? value : String(value);
+        default:
+            return value;
+    }
+}
 
 /**
  * Валидация значения поля по его типу
